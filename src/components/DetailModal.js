@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import { fetchMediaDetails, fetchTvSeasonEpisodes } from '../services/tmdb';
 import { fetchTorrentStreams } from '../services/torrentService';
 
@@ -28,6 +29,7 @@ export default function DetailModal({
   isSaved,
   onClose,
   onPlayStream,
+  onPlay,
   onToggleWatchlist
 }) {
   const [details, setDetails] = useState(null);
@@ -37,12 +39,16 @@ export default function DetailModal({
   const [selectedSeason, setSelectedSeason] = useState(1);
   const [selectedEpisode, setSelectedEpisode] = useState(1);
   const [episodes, setEpisodes] = useState([]);
+  const [audioFilter, setAudioFilter] = useState('all');
+
+  const playFn = onPlayStream || onPlay;
 
   useEffect(() => {
     if (!media || !visible) return;
     setLoading(true);
     setLoadingStreams(true);
     setStreams([]);
+    setAudioFilter('all');
 
     fetchMediaDetails(media.id, media.mediaType).then(async (data) => {
       setDetails(data);
@@ -53,7 +59,7 @@ export default function DetailModal({
         setEpisodes(eps);
       }
 
-      const imdb = data?.imdbId || (media.imdbId);
+      const imdb = data?.imdbId || media.imdbId;
       if (imdb) {
         const torrents = await fetchTorrentStreams(imdb, data?.mediaType || 'movie', 1, 1);
         setStreams(torrents);
@@ -61,49 +67,6 @@ export default function DetailModal({
       setLoadingStreams(false);
     });
   }, [media, visible]);
-
-  const handleDownload = async (stream) => {
-    try {
-      const downloadUri = stream?.magnetUri || stream?.url;
-      if (!downloadUri) {
-        Alert.alert('Download Error', 'No download link available for this stream.');
-        return;
-      }
-
-      if (downloadUri.startsWith('http')) {
-        await Linking.openURL(downloadUri);
-        return;
-      }
-
-      try {
-        const canOpen = await Linking.canOpenURL(downloadUri);
-        if (canOpen) {
-          await Linking.openURL(downloadUri);
-        } else {
-          showDownloadPrompt(downloadUri);
-        }
-      } catch {
-        showDownloadPrompt(downloadUri);
-      }
-    } catch (err) {
-      Alert.alert('Download Error', err.message || 'Unable to open download link.');
-    }
-  };
-
-  const showDownloadPrompt = (magnet) => {
-    Alert.alert(
-      'Torrent Downloader Needed',
-      'To download torrents directly to your phone storage, please install a downloader (like 1DM or Flud) from Play Store.',
-      [
-        {
-          text: 'Get 1DM (Play Store)',
-          onPress: () =>
-            Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager')
-        },
-        { text: 'Cancel', style: 'cancel' }
-      ]
-    );
-  };
 
   const handleEpisodeSelect = async (ep) => {
     setSelectedEpisode(ep.episodeNumber);
@@ -130,11 +93,91 @@ export default function DetailModal({
     }
   };
 
+  const handleDownload = async (stream) => {
+    const downloadUri = stream?.magnetUri || stream?.url;
+    if (!downloadUri) {
+      Alert.alert('Download Error', 'No download link available for this stream.');
+      return;
+    }
+
+    // Always copy link to clipboard first so user has it immediately
+    await Clipboard.setStringAsync(downloadUri);
+
+    if (downloadUri.startsWith('http')) {
+      Linking.openURL(downloadUri).catch(() => {});
+      return;
+    }
+
+    // Direct open without canOpenURL check (bypasses Android 11+ package visibility restriction)
+    try {
+      await Linking.openURL(downloadUri);
+    } catch {
+      Alert.alert(
+        '📥 Magnet Link Copied!',
+        'The torrent magnet link has been copied to your clipboard.\n\nTo download this movie file directly to your phone storage, open any downloader app (like 1DM, Flud, or TorrDroid) and paste the link.\n\nOr tap below to get 1DM from Google Play Store.',
+        [
+          {
+            text: 'Install 1DM (Play Store)',
+            onPress: () =>
+              Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager')
+          },
+          { text: 'OK, Copied!', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  const handleOpenVLC = async (stream) => {
+    const uri = stream?.magnetUri || stream?.url;
+    if (!uri) {
+      Alert.alert('Error', 'No stream URL found.');
+      return;
+    }
+
+    await Clipboard.setStringAsync(uri);
+
+    try {
+      await Linking.openURL(uri);
+    } catch {
+      Alert.alert(
+        '⚡ VLC / MX Player',
+        'Stream link copied to clipboard!\n\nTo play torrent streams with hardware acceleration and Hindi dual-audio selection, open VLC > "Open Network Stream" and paste the link, or install VLC from Play Store.',
+        [
+          {
+            text: 'Install VLC (Play Store)',
+            onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=org.videolan.vlc')
+          },
+          {
+            text: 'Install 1DM (Play Store)',
+            onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager')
+          },
+          { text: 'OK', style: 'cancel' }
+        ]
+      );
+    }
+  };
+
+  const handleCopyLink = async (stream) => {
+    const uri = stream?.magnetUri || stream?.url;
+    if (uri) {
+      await Clipboard.setStringAsync(uri);
+      Alert.alert('📋 Copied!', 'Magnet link copied to clipboard. You can paste it into 1DM, Flud, TorrDroid, or VLC.');
+    }
+  };
+
   if (!media) return null;
+
+  const filteredStreams = streams.filter((s) => {
+    if (audioFilter === 'hindi') return s.audioBadge.includes('Hindi');
+    if (audioFilter === 'dual') return s.audioBadge.includes('Dual');
+    if (audioFilter === 'english') return s.audioBadge.includes('English');
+    return true;
+  });
 
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
+        <StatusBar barStyle="light-content" backgroundColor="#141414" />
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Backdrop Header */}
           <View style={styles.backdropWrap}>
@@ -152,6 +195,7 @@ export default function DetailModal({
             </TouchableOpacity>
           </View>
 
+          {/* Details Content */}
           {loading ? (
             <View style={styles.loadingWrap}>
               <ActivityIndicator size="large" color="#E50914" />
@@ -161,22 +205,24 @@ export default function DetailModal({
               <Text style={styles.title}>{details?.title || media.title}</Text>
               {details?.tagline ? <Text style={styles.tagline}>"{details.tagline}"</Text> : null}
 
-              {/* Meta Stats Row */}
+              {/* Meta info */}
               <View style={styles.metaRow}>
                 <Text style={styles.rating}>★ {details?.rating || media.rating}</Text>
                 <Text style={styles.metaText}>{details?.releaseYear || media.releaseYear}</Text>
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>P2P TORRENT</Text>
-                </View>
                 {details?.runtime ? (
-                  <Text style={styles.metaText}>{details.runtime} min</Text>
+                  <Text style={styles.metaText}>
+                    {Math.floor(details.runtime / 60)}h {details.runtime % 60}m
+                  </Text>
                 ) : null}
+                <View style={styles.badge}>
+                  <Text style={styles.badgeText}>HD</Text>
+                </View>
               </View>
 
-              {/* Action Buttons */}
+              {/* Watchlist Button */}
               <TouchableOpacity
                 style={styles.watchlistBtn}
-                onPress={() => onToggleWatchlist(details || media)}
+                onPress={() => onToggleWatchlist && onToggleWatchlist(media)}
               >
                 <Ionicons
                   name={isSaved ? 'checkmark' : 'add'}
@@ -184,7 +230,7 @@ export default function DetailModal({
                   color="#fff"
                 />
                 <Text style={styles.watchlistBtnText}>
-                  {isSaved ? 'In My List' : 'Add to My List'}
+                  {isSaved ? 'In My Watchlist' : 'Add to Watchlist'}
                 </Text>
               </TouchableOpacity>
 
@@ -194,62 +240,46 @@ export default function DetailModal({
               {/* Genres */}
               {details?.genres?.length > 0 && (
                 <View style={styles.genreWrap}>
-                  {details.genres.map((g, idx) => (
-                    <View key={idx} style={styles.genrePill}>
-                      <Text style={styles.genreText}>{g}</Text>
+                  {details.genres.map((g) => (
+                    <View key={g.id || g} style={styles.genrePill}>
+                      <Text style={styles.genreText}>{g.name || g}</Text>
                     </View>
                   ))}
                 </View>
               )}
 
-              {/* Cast & Director */}
-              {details?.director && details.director !== 'N/A' && (
-                <Text style={styles.infoLine}>
-                  <Text style={styles.infoLabel}>Director: </Text>
-                  {details.director}
-                </Text>
-              )}
-              {details?.cast && (
-                <Text style={styles.infoLine}>
-                  <Text style={styles.infoLabel}>Starring: </Text>
-                  {details.cast}
-                </Text>
-              )}
-
-                            {/* Primary Instant Cloud Play Banner */}
-              {details?.imdbId && (
-                <TouchableOpacity
-                  style={styles.cloudPlayBanner}
-                  activeOpacity={0.85}
-                  onPress={() =>
-                    onPlayStream(
-                      details || media,
-                      {
-                        isCloudStream: true,
-                        quality: '1080p FHD',
-                        audioBadge: '⚡ Instant Cloud',
-                        title: `Instant Stream - ${details.title || media.title}`,
-                        imdbId: details.imdbId
-                      },
-                      selectedSeason,
-                      selectedEpisode
-                    )
-                  }
-                >
-                  <View style={styles.cloudPlayLeft}>
-                    <View style={styles.cloudPlayIconWrap}>
-                      <Ionicons name="flash" size={20} color="#000" />
-                    </View>
-                    <View style={styles.cloudPlayTextWrap}>
-                      <Text style={styles.cloudPlayTitle}>Play Instant HD (Cloud)</Text>
-                      <Text style={styles.cloudPlaySub}>
-                        Zero Buffering • Fast 1080p • Multi-Subtitles
-                      </Text>
-                    </View>
+              {/* Instant Cloud Stream Banner (Zero Buffering & Multi-Audio/Hindi) */}
+              <TouchableOpacity
+                style={styles.cloudPlayBanner}
+                activeOpacity={0.85}
+                onPress={() =>
+                  playFn &&
+                  playFn(
+                    details || media,
+                    {
+                      isCloudStream: true,
+                      title: details?.title || media.title,
+                      id: (details || media).id,
+                      imdbId: details?.imdbId || media.imdbId
+                    },
+                    selectedSeason,
+                    selectedEpisode
+                  )
+                }
+              >
+                <View style={styles.cloudPlayLeft}>
+                  <View style={styles.cloudPlayIconWrap}>
+                    <Ionicons name="flash" size={20} color="#000" />
                   </View>
-                  <Ionicons name="play-circle" size={32} color="#E50914" />
-                </TouchableOpacity>
-              )}
+                  <View style={styles.cloudPlayTextWrap}>
+                    <Text style={styles.cloudPlayTitle}>Play Instant HD (Cloud)</Text>
+                    <Text style={styles.cloudPlaySub}>
+                      ⚡ Zero Buffering • 🇮🇳 Multi-Audio & Hindi • Subtitles
+                    </Text>
+                  </View>
+                </View>
+                <Ionicons name="play-circle" size={34} color="#E50914" />
+              </TouchableOpacity>
 
               {/* TV Show Seasons & Episodes (if series) */}
               {details?.mediaType === 'tv' && details.seasons?.length > 0 && (
@@ -315,19 +345,60 @@ export default function DetailModal({
                   <Text style={styles.streamCountBadge}>{streams.length} Found</Text>
                 </View>
 
+                {/* Audio Language Filter Chips */}
+                {streams.length > 0 && (
+                  <View style={styles.audioFilterRow}>
+                    <TouchableOpacity
+                      style={[styles.audioFilterChip, audioFilter === 'all' && styles.audioFilterChipActive]}
+                      onPress={() => setAudioFilter('all')}
+                    >
+                      <Text style={[styles.audioFilterChipText, audioFilter === 'all' && styles.audioFilterChipTextActive]}>
+                        All ({streams.length})
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.audioFilterChip, audioFilter === 'hindi' && styles.audioFilterChipActive]}
+                      onPress={() => setAudioFilter('hindi')}
+                    >
+                      <Text style={[styles.audioFilterChipText, audioFilter === 'hindi' && styles.audioFilterChipTextActive]}>
+                        🇮🇳 Hindi ({streams.filter((s) => s.audioBadge.includes('Hindi')).length})
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.audioFilterChip, audioFilter === 'dual' && styles.audioFilterChipActive]}
+                      onPress={() => setAudioFilter('dual')}
+                    >
+                      <Text style={[styles.audioFilterChipText, audioFilter === 'dual' && styles.audioFilterChipTextActive]}>
+                        🎧 Dual ({streams.filter((s) => s.audioBadge.includes('Dual')).length})
+                      </Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={[styles.audioFilterChip, audioFilter === 'english' && styles.audioFilterChipActive]}
+                      onPress={() => setAudioFilter('english')}
+                    >
+                      <Text style={[styles.audioFilterChipText, audioFilter === 'english' && styles.audioFilterChipTextActive]}>
+                        English
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
                 {loadingStreams ? (
                   <View style={styles.streamLoadingWrap}>
                     <ActivityIndicator size="small" color="#E50914" />
                     <Text style={styles.streamLoadingText}>Searching active torrent swarms & seeds...</Text>
                   </View>
-                ) : streams.length === 0 ? (
-                  <Text style={styles.noStreamsText}>No torrent streams found for this title.</Text>
+                ) : filteredStreams.length === 0 ? (
+                  <Text style={styles.noStreamsText}>No torrent streams found for this filter.</Text>
                 ) : (
-                  streams.map((stream, idx) => (
+                  filteredStreams.map((stream, idx) => (
                     <View key={stream.id || idx} style={styles.streamCard}>
                       <TouchableOpacity
                         activeOpacity={0.7}
-                        onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
+                        onPress={() => playFn && playFn(details || media, stream, selectedSeason, selectedEpisode)}
                       >
                         <View style={styles.streamTopLine}>
                           <View style={[styles.qualityBadge, stream.quality.includes('4K') && styles.quality4k]}>
@@ -346,28 +417,44 @@ export default function DetailModal({
                           ) : null}
                           <Text style={styles.streamMetaItem}>👤 {stream.seeders} Seeders</Text>
                           {stream.url ? (
-                            <Text style={[styles.streamMetaItem, { color: '#46d369', fontWeight: '700' }]}>⚡ Direct High-Speed</Text>
+                            <Text style={[styles.streamMetaItem, { color: '#46d369', fontWeight: '700' }]}>⚡ Direct</Text>
                           ) : (
                             <Text style={[styles.streamMetaItem, { color: '#00a8ff' }]}>P2P Swarm</Text>
                           )}
                         </View>
                       </TouchableOpacity>
 
+                      {/* 4 Action Buttons Row: Watch, VLC/MX, Download, Copy */}
                       <View style={styles.streamActionRow}>
                         <TouchableOpacity
                           style={styles.streamPlayBtn}
-                          onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
+                          onPress={() => playFn && playFn(details || media, stream, selectedSeason, selectedEpisode)}
                         >
-                          <Ionicons name="play" size={14} color="#000" />
-                          <Text style={styles.streamPlayBtnText}>Watch Now</Text>
+                          <Ionicons name="play" size={13} color="#000" />
+                          <Text style={styles.streamPlayBtnText}>Watch</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.streamVlcBtn}
+                          onPress={() => handleOpenVLC(stream)}
+                        >
+                          <Ionicons name="open-outline" size={13} color="#000" />
+                          <Text style={styles.streamVlcBtnText}>VLC/MX</Text>
                         </TouchableOpacity>
 
                         <TouchableOpacity
                           style={styles.streamDownloadBtn}
                           onPress={() => handleDownload(stream)}
                         >
-                          <Ionicons name="download-outline" size={15} color="#fff" />
+                          <Ionicons name="download-outline" size={14} color="#fff" />
                           <Text style={styles.streamDownloadBtnText}>Download</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.streamCopyBtn}
+                          onPress={() => handleCopyLink(stream)}
+                        >
+                          <Ionicons name="copy-outline" size={14} color="#aaa" />
                         </TouchableOpacity>
                       </View>
                     </View>
@@ -404,7 +491,7 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: Platform.OS === "android" ? (StatusBar.currentHeight || 28) + 8 : 16,
+    top: Platform.OS === 'android' ? (StatusBar.currentHeight || 28) + 8 : 16,
     right: 16,
     backgroundColor: 'rgba(0,0,0,0.6)',
     width: 36,
@@ -499,14 +586,44 @@ const styles = StyleSheet.create({
     color: '#aaa',
     fontSize: 12
   },
-  infoLine: {
-    color: '#bbb',
-    fontSize: 13,
-    marginBottom: 6
+  cloudPlayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e1e1e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#333'
   },
-  infoLabel: {
-    color: '#777',
-    fontWeight: '600'
+  cloudPlayLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12
+  },
+  cloudPlayIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  cloudPlayTextWrap: {
+    flex: 1
+  },
+  cloudPlayTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  cloudPlaySub: {
+    color: '#aaa',
+    fontSize: 11,
+    marginTop: 2
   },
   episodesSection: {
     marginTop: 16,
@@ -575,7 +692,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12
+    marginBottom: 10
   },
   streamCountBadge: {
     color: '#aaa',
@@ -584,6 +701,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 10
+  },
+  audioFilterRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+    flexWrap: 'wrap'
+  },
+  audioFilterChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#222'
+  },
+  audioFilterChipActive: {
+    backgroundColor: '#E50914'
+  },
+  audioFilterChipText: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  audioFilterChipTextActive: {
+    color: '#fff',
+    fontWeight: '700'
   },
   streamLoadingWrap: {
     flexDirection: 'row',
@@ -650,84 +791,70 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '600'
   },
-  cloudPlayBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: '#1e1e1e',
-    borderRadius: 10,
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-    marginTop: 16,
-    borderWidth: 1,
-    borderColor: '#333'
-  },
-  cloudPlayLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    gap: 12
-  },
-  cloudPlayIconWrap: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#fff',
-    justifyContent: 'center',
-    alignItems: 'center'
-  },
-  cloudPlayTextWrap: {
-    flex: 1
-  },
-  cloudPlayTitle: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '700'
-  },
-  cloudPlaySub: {
-    color: '#aaa',
-    fontSize: 11,
-    marginTop: 2
-  },
   streamActionRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 8,
     marginTop: 10,
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: '#282828'
   },
   streamPlayBtn: {
-    flex: 1,
+    flex: 1.2,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#fff',
-    paddingVertical: 8,
+    paddingVertical: 7,
     borderRadius: 6,
-    gap: 6
+    gap: 4
   },
   streamPlayBtnText: {
     color: '#000',
     fontWeight: '700',
-    fontSize: 13
+    fontSize: 12
   },
-  streamDownloadBtn: {
-    flex: 1,
+  streamVlcBtn: {
+    flex: 1.3,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#262626',
-    paddingVertical: 8,
+    backgroundColor: '#ff9800',
+    paddingVertical: 7,
     borderRadius: 6,
-    gap: 6,
+    gap: 4
+  },
+  streamVlcBtnText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 12
+  },
+  streamDownloadBtn: {
+    flex: 1.4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#282828',
+    paddingVertical: 7,
+    borderRadius: 6,
+    gap: 4,
     borderWidth: 1,
-    borderColor: '#3e3e3e'
+    borderColor: '#444'
   },
   streamDownloadBtnText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 13
+    fontSize: 12
+  },
+  streamCopyBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: '#222',
+    borderRadius: 6,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#333'
   }
 });
