@@ -571,7 +571,7 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     fontWeight: '600'
-  }
+  },
   streamActionRow: {
     flexDirection: 'row',
     alignItems: 'center',

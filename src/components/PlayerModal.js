@@ -23,7 +23,7 @@ export default function PlayerModal({
 }) {
   const [loading, setLoading] = useState(true);
 
-  if (!item || !stream) return null;
+  if (!visible || !item || !stream) return null;
 
   // 100% Client-Side WebTorrent HTML player (Uses Phone RAM, No Server)
   const clientPlayerHtml = `

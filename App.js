@@ -105,9 +105,10 @@ export default function App() {
     setDetailVisible(true);
   };
 
-  const openPlayer = (item, season = 1, episode = 1) => {
+  const openPlayer = (item, stream, season = 1, episode = 1) => {
     setDetailVisible(false);
     setPlayerItem(item);
+    setCurrentStream(stream);
     setCurrentSeason(season);
     setCurrentEpisode(episode);
     setPlayerVisible(true);
@@ -290,7 +291,7 @@ export default function App() {
                 <View style={styles.heroBtnRow}>
                   <TouchableOpacity
                     style={styles.heroPlayBtn}
-                    onPress={() => openPlayer(heroItem)}
+                    onPress={() => openDetails(heroItem)}
                   >
                     <Ionicons name="play" size={20} color="#000" />
                     <Text style={styles.heroPlayText}>Play</Text>
@@ -344,6 +345,7 @@ export default function App() {
         media={selectedMedia}
         isSaved={selectedMedia ? watchlist.some((x) => x.id === selectedMedia.id) : false}
         onClose={() => setDetailVisible(false)}
+        onPlayStream={openPlayer}
         onPlay={openPlayer}
         onToggleWatchlist={handleToggleWatchlist}
       />
@@ -352,6 +354,7 @@ export default function App() {
       <PlayerModal
         visible={playerVisible}
         item={playerItem}
+        stream={currentStream}
         season={currentSeason}
         episode={currentEpisode}
         onClose={() => setPlayerVisible(false)}
