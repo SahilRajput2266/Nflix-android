@@ -9,7 +9,9 @@ import {
   ScrollView,
   ActivityIndicator,
   Dimensions,
-  SafeAreaView
+  SafeAreaView,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -303,7 +305,7 @@ const styles = StyleSheet.create({
   },
   closeBtn: {
     position: 'absolute',
-    top: 16,
+    top: Platform.OS === "android" ? (StatusBar.currentHeight || 28) + 8 : 16,
     right: 16,
     backgroundColor: 'rgba(0,0,0,0.6)',
     width: 36,

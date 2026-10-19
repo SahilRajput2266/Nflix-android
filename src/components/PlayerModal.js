@@ -6,6 +6,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   SafeAreaView,
+  Platform,
   StatusBar,
   ActivityIndicator
 } from 'react-native';
@@ -107,7 +108,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#000'
   },
   header: {
-    height: 54,
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 28) : 0,
+    height: Platform.OS === "android" ? 54 + (StatusBar.currentHeight || 28) : 54,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,

@@ -4,6 +4,7 @@ import {
   Text,
   View,
   SafeAreaView,
+  Platform,
   ScrollView,
   Image,
   TouchableOpacity,
@@ -33,8 +34,8 @@ import PlayerModal from './src/components/PlayerModal';
 import DetailModal from './src/components/DetailModal';
 
 const { width } = Dimensions.get('window');
-const POSTER_WIDTH = width * 0.31;
-const POSTER_HEIGHT = POSTER_WIDTH * 1.5;
+const POSTER_WIDTH = Math.round(width * 0.285);
+const POSTER_HEIGHT = Math.round(width * 0.285 * 1.48);
 
 export default function App() {
   const [trending, setTrending] = useState([]);
@@ -388,6 +389,7 @@ function MediaRow({ title, data, onItemPress }) {
 
 const styles = StyleSheet.create({
   safeContainer: {
+    paddingTop: Platform.OS === "android" ? (StatusBar.currentHeight || 28) + 6 : 0,
     flex: 1,
     backgroundColor: '#141414'
   },
@@ -405,13 +407,13 @@ const styles = StyleSheet.create({
   },
   brandN: {
     color: '#E50914',
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '900',
     letterSpacing: -1
   },
   brandText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '800',
     letterSpacing: 2,
     marginLeft: 1
@@ -473,7 +475,7 @@ const styles = StyleSheet.create({
   },
   heroWrap: {
     width,
-    height: width * 0.9,
+    height: Math.round(width * 0.72),
     position: 'relative',
     marginBottom: 10
   },
@@ -492,7 +494,7 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: '#fff',
-    fontSize: 26,
+    fontSize: 21,
     fontWeight: '900',
     marginBottom: 4,
     textShadowColor: 'rgba(0,0,0,0.8)',
