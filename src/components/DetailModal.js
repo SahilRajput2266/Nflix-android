@@ -231,20 +231,23 @@ export default function DetailModal({
         <StatusBar barStyle="light-content" backgroundColor="#141414" />
         <ScrollView style={styles.scroll} showsVerticalScrollIndicator={false}>
           {/* Backdrop Header */}
-          <View style={styles.backdropWrap}>
+          <TouchableOpacity style={styles.backdropWrap} activeOpacity={0.9} onPress={() => handlePlayCloud(selectedEpisode)}>
             <Image
               source={{ uri: media.backdrop || media.poster }}
               style={styles.backdrop}
               resizeMode="cover"
             />
             <LinearGradient
-              colors={['transparent', 'rgba(20,20,20,0.8)', '#141414']}
+              colors={['transparent', 'rgba(20,20,20,0.6)', '#141414']}
               style={styles.gradient}
             />
+            <View style={styles.backdropPlayBtn}>
+              <Ionicons name="play" size={28} color="#fff" />
+            </View>
             <TouchableOpacity style={styles.closeBtn} onPress={onClose}>
               <Ionicons name="close" size={24} color="#fff" />
             </TouchableOpacity>
-          </View>
+          </TouchableOpacity>
 
           {/* Details Content */}
           {loading ? (
@@ -268,6 +271,49 @@ export default function DetailModal({
                 <View style={styles.badge}>
                   <Text style={styles.badgeText}>{isTvShow ? 'TV SERIES' : 'MOVIE'}</Text>
                 </View>
+              </View>
+
+              {/* Prominent Primary Play Button (Netflix Style) */}
+              <TouchableOpacity
+                style={styles.primaryPlayBtn}
+                activeOpacity={0.85}
+                onPress={() => handlePlayCloud(selectedEpisode)}
+              >
+                <Ionicons name="play" size={20} color="#000" />
+                <Text style={styles.primaryPlayBtnText}>
+                  {isTvShow ? ('Play S' + selectedSeason + ' Ep ' + selectedEpisode) : 'Play Cloud HD'}
+                </Text>
+              </TouchableOpacity>
+
+              {/* Sub-Actions Row: My List, Zero Buffer, VLC */}
+              <View style={styles.actionBtnRow}>
+                <TouchableOpacity
+                  style={styles.actionPillBtn}
+                  onPress={() => onToggleWatchlist && onToggleWatchlist(media)}
+                >
+                  <Ionicons name={isSaved ? 'checkmark' : 'add'} size={18} color="#fff" />
+                  <Text style={styles.actionPillText}>{isSaved ? 'In My List' : 'Add to List'}</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionPillBtn}
+                  onPress={() => handlePlayCloud(selectedEpisode)}
+                >
+                  <Ionicons name="flash" size={15} color="#46d369" />
+                  <Text style={[styles.actionPillText, { color: '#46d369' }]}>Cloud HD</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={styles.actionPillBtn}
+                  onPress={() => {
+                    const sample = streams[0];
+                    if (sample) handleOpenVLC(sample);
+                    else handlePlayCloud(selectedEpisode);
+                  }}
+                >
+                  <Ionicons name="open-outline" size={15} color="#ff9800" />
+                  <Text style={[styles.actionPillText, { color: '#ff9800' }]}>VLC / MX</Text>
+                </TouchableOpacity>
               </View>
 
               {/* Watchlist Button */}
@@ -570,6 +616,60 @@ export default function DetailModal({
 }
 
 const styles = StyleSheet.create({
+  primaryPlayBtn: {
+    backgroundColor: '#fff',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 12,
+    borderRadius: 6,
+    marginBottom: 10,
+    gap: 8,
+    shadowColor: '#fff',
+    shadowOpacity: 0.2,
+    shadowRadius: 6,
+    elevation: 4
+  },
+  primaryPlayBtnText: {
+    color: '#000',
+    fontWeight: '800',
+    fontSize: 16
+  },
+  actionBtnRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 16
+  },
+  actionPillBtn: {
+    flex: 1,
+    backgroundColor: '#262626',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 9,
+    borderRadius: 6,
+    gap: 5
+  },
+  actionPillText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  backdropPlayBtn: {
+    position: 'absolute',
+    top: '42%',
+    left: '50%',
+    marginLeft: -26,
+    marginTop: -26,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#E50914',
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 6
+  },
   container: {
     flex: 1,
     backgroundColor: '#141414'
