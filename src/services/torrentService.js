@@ -1,4 +1,4 @@
-// Standalone Mobile Torrent & Debrid Service
+// 100% Client-Side Torrent Service (Runs entirely on mobile, no backend server needed)
 export async function fetchTorrentStreams(imdbId, mediaType = 'movie', season = 1, episode = 1, debridKey = null) {
   if (!imdbId) return [];
 
@@ -13,8 +13,14 @@ export async function fetchTorrentStreams(imdbId, mediaType = 'movie', season = 
     : `https://torrentio.strem.fun/${configPrefix}stream/movie/${cleanImdb}.json`;
 
   try {
-    const res = await fetch(endpoint, { headers: { 'User-Agent': 'NFlixMobile/1.0' } });
-    if (!res.ok) throw new Error(`Torrentio response error: ${res.status}`);
+    const res = await fetch(endpoint, {
+      headers: {
+        'Accept': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36'
+      }
+    });
+
+    if (!res.ok) throw new Error(`Torrentio error: ${res.status}`);
     const data = await res.json();
     if (!data.streams || !Array.isArray(data.streams)) return [];
 
@@ -47,10 +53,26 @@ export async function fetchTorrentStreams(imdbId, mediaType = 'movie', season = 
 
       const firstLine = rawTitle.split('\n')[0].replace(/[\.\[\]]/g, ' ').trim();
 
+      // Build standard magnet URI for client-side P2P streaming
+      const trackers = [
+        'wss://tracker.openwebtorrent.com',
+        'wss://tracker.btorrent.xyz',
+        'wss://tracker.fastcast.nz',
+        'wss://tracker.webtorrent.dev',
+        'udp://tracker.opentrackr.org:1337/announce',
+        'udp://open.stealth.si:80/announce',
+        'udp://tracker.torrent.eu.org:451/announce'
+      ].map(t => '&tr=' + encodeURIComponent(t)).join('');
+
+      const magnetUri = s.infoHash
+        ? `magnet:?xt=urn:btih:${s.infoHash}&dn=${encodeURIComponent(firstLine || 'Video')}${trackers}`
+        : null;
+
       return {
         id: s.infoHash || ('stream-' + idx),
         infoHash: s.infoHash,
         url: s.url || null,
+        magnetUri,
         quality,
         audioBadge,
         isHindi: isHindi || isDualAudio,
@@ -61,7 +83,6 @@ export async function fetchTorrentStreams(imdbId, mediaType = 'movie', season = 
       };
     });
 
-    // Priority sorting: Hindi/Dual audio first, then highest seeders
     parsed.sort((a, b) => {
       if (a.isHindi && !b.isHindi) return -1;
       if (!a.isHindi && b.isHindi) return 1;
@@ -70,7 +91,7 @@ export async function fetchTorrentStreams(imdbId, mediaType = 'movie', season = 
 
     return parsed;
   } catch (err) {
-    console.warn('fetchTorrentStreams error:', err.message);
+    console.warn('fetchTorrentStreams client-side error:', err.message);
     return [];
   }
 }
