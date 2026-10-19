@@ -19,11 +19,30 @@ export default function PlayerModal({
   stream,
   season = 1,
   episode = 1,
-  onClose
+  onClose,
+  onNextEpisode
 }) {
   const [loading, setLoading] = useState(true);
+  const [selectedServer, setSelectedServer] = useState('multiembed');
 
   if (!visible || !item || !stream) return null;
+
+  const imdbId = stream.imdbId || item.imdbId;
+  const isTv = item.mediaType === 'tv';
+
+  const getEmbedUrl = (srv) => {
+    if (srv === 'vidsrccc') {
+      return isTv
+        ? `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}`
+        : `https://vidsrc.cc/v2/embed/movie/${imdbId}`;
+    }
+    // Default: multiembed (super fast, clean)
+    return isTv
+      ? `https://multiembed.mov/?video_id=${imdbId}&s=${season}&e=${episode}`
+      : `https://multiembed.mov/?video_id=${imdbId}`;
+  };
+
+  const currentEmbedUrl = stream.embedUrl || getEmbedUrl(selectedServer);
 
   // 100% Client-Side WebTorrent HTML player (Uses Phone RAM, No Server)
   const clientPlayerHtml = `
@@ -65,8 +84,8 @@ export default function PlayerModal({
         </div>
         <script>
           (function() {
-            var directUrl = "${stream.url || ''}";
-            var magnetUri = "${stream.magnetUri || ''}";
+            var directUrl = ${JSON.stringify(stream.url || '')};
+            var magnetUri = ${JSON.stringify(stream.magnetUri || '')};
             var videoElem = document.getElementById('player');
             var statusWrap = document.getElementById('statusWrap');
             var hud = document.getElementById('hud');
@@ -74,7 +93,6 @@ export default function PlayerModal({
             var subMsg = document.getElementById('subMsg');
 
             if (directUrl) {
-              // Direct URL mode
               mainMsg.innerText = 'Connecting to Fast Stream...';
               videoElem.src = directUrl;
               videoElem.onloadedmetadata = function() {
@@ -95,7 +113,7 @@ export default function PlayerModal({
                 subMsg.innerText = 'Found ' + torrent.name;
 
                 var videoFile = torrent.files.find(function(f) {
-                  return /\.(mp4|mkv|webm|avi|mov)$/i.test(f.name);
+                  return /\\.(mp4|mkv|webm|avi|mov)$/i.test(f.name);
                 }) || torrent.files[0];
 
                 if (videoFile) {
@@ -148,37 +166,101 @@ export default function PlayerModal({
               {item.title}
             </Text>
             <Text style={styles.subBadge} numberOfLines={1}>
-              {stream.quality} • {stream.audioBadge}
+              {stream.isCloudStream ? '⚡ Instant Cloud CDN' : (stream.quality || 'HD') + ' • ' + (stream.audioBadge || 'P2P')}
             </Text>
           </View>
         </View>
 
-        {/* In-Memory Client Video Player */}
+        {/* Cloud Stream Server Switcher (Only shown in Cloud Mode) */}
+        {stream.isCloudStream && (
+          <View style={styles.serverRow}>
+            <TouchableOpacity
+              style={[styles.serverChip, selectedServer === 'multiembed' && styles.serverChipActive]}
+              onPress={() => {
+                setLoading(true);
+                setSelectedServer('multiembed');
+              }}
+            >
+              <Text style={[styles.serverChipText, selectedServer === 'multiembed' && styles.serverChipTextActive]}>
+                ⚡ Server 1 (MultiEmbed)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.serverChip, selectedServer === 'vidsrccc' && styles.serverChipActive]}
+              onPress={() => {
+                setLoading(true);
+                setSelectedServer('vidsrccc');
+              }}
+            >
+              <Text style={[styles.serverChipText, selectedServer === 'vidsrccc' && styles.serverChipTextActive]}>
+                ⚡ Server 2 (VidSrc)
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {/* Player Container */}
         <View style={styles.playerContainer}>
-          <WebView
-            originWhitelist={['*']}
-            source={{ html: clientPlayerHtml }}
-            style={styles.webview}
-            javaScriptEnabled={true}
-            domStorageEnabled={true}
-            allowsFullscreenVideo={true}
-            allowsInlineMediaPlayback={true}
-            mediaPlaybackRequiresUserAction={false}
-            onLoadStart={() => setLoading(true)}
-            onLoadEnd={() => setLoading(false)}
-          />
+          {stream.isCloudStream ? (
+            <WebView
+              key={selectedServer + '_' + (isTv ? `${season}_${episode}` : 'movie')}
+              originWhitelist={['*']}
+              source={{ uri: currentEmbedUrl }}
+              style={styles.webview}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsFullscreenVideo={true}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
+            />
+          ) : (
+            <WebView
+              originWhitelist={['*']}
+              source={{ html: clientPlayerHtml }}
+              style={styles.webview}
+              javaScriptEnabled={true}
+              domStorageEnabled={true}
+              allowsFullscreenVideo={true}
+              allowsInlineMediaPlayback={true}
+              mediaPlaybackRequiresUserAction={false}
+              onLoadStart={() => setLoading(true)}
+              onLoadEnd={() => setLoading(false)}
+            />
+          )}
+
+          {loading && (
+            <View style={styles.loadingOverlay}>
+              <ActivityIndicator size="large" color="#E50914" />
+              <Text style={styles.loadingOverlayText}>Connecting to stream...</Text>
+            </View>
+          )}
         </View>
 
         {/* Footer Info */}
         <View style={styles.footer}>
-          <Text style={styles.footerText} numberOfLines={1}>
-            📡 {stream.title}
-          </Text>
-          <View style={styles.footerMeta}>
-            <Text style={styles.footerMetaText}>Seeders: {stream.seeders}</Text>
-            {stream.size ? <Text style={styles.footerMetaText}>• Size: {stream.size}</Text> : null}
-            <Text style={[styles.footerMetaText, { color: '#46d369' }]}>• Client-Side P2P</Text>
-          </View>
+          {stream.isCloudStream ? (
+            <View style={styles.footerMeta}>
+              <Text style={[styles.footerMetaText, { color: '#46d369', fontWeight: '700' }]}>
+                ⚡ Direct Cloud Stream (Zero Buffering)
+              </Text>
+              <Text style={styles.footerMetaText}>• 1080p FHD • Subtitles Included</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.footerText} numberOfLines={1}>
+                📡 {stream.title}
+              </Text>
+              <View style={styles.footerMeta}>
+                <Text style={styles.footerMetaText}>Seeders: {stream.seeders}</Text>
+                {stream.size ? <Text style={styles.footerMetaText}>• Size: {stream.size}</Text> : null}
+                <Text style={[styles.footerMetaText, { color: '#46d369' }]}>• Client-Side P2P</Text>
+              </View>
+            </>
+          )}
         </View>
       </SafeAreaView>
     </Modal>
@@ -217,6 +299,34 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600'
   },
+  serverRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: '#161616',
+    gap: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#252525'
+  },
+  serverChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 14,
+    backgroundColor: '#262626'
+  },
+  serverChipActive: {
+    backgroundColor: '#E50914'
+  },
+  serverChipText: {
+    color: '#aaa',
+    fontSize: 11,
+    fontWeight: '600'
+  },
+  serverChipTextActive: {
+    color: '#fff',
+    fontWeight: '700'
+  },
   playerContainer: {
     flex: 1,
     backgroundColor: '#000',
@@ -225,6 +335,18 @@ const styles = StyleSheet.create({
   webview: {
     flex: 1,
     backgroundColor: '#000'
+  },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: '#000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    pointerEvents: 'none'
+  },
+  loadingOverlayText: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 10
   },
   footer: {
     padding: 10,

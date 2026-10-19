@@ -173,6 +173,41 @@ export default function DetailModal({
                 </Text>
               )}
 
+                            {/* Primary Instant Cloud Play Banner */}
+              {details?.imdbId && (
+                <TouchableOpacity
+                  style={styles.cloudPlayBanner}
+                  activeOpacity={0.85}
+                  onPress={() =>
+                    onPlayStream(
+                      details || media,
+                      {
+                        isCloudStream: true,
+                        quality: '1080p FHD',
+                        audioBadge: '⚡ Instant Cloud',
+                        title: `Instant Stream - ${details.title || media.title}`,
+                        imdbId: details.imdbId
+                      },
+                      selectedSeason,
+                      selectedEpisode
+                    )
+                  }
+                >
+                  <View style={styles.cloudPlayLeft}>
+                    <View style={styles.cloudPlayIconWrap}>
+                      <Ionicons name="flash" size={20} color="#000" />
+                    </View>
+                    <View style={styles.cloudPlayTextWrap}>
+                      <Text style={styles.cloudPlayTitle}>Play Instant HD (Cloud)</Text>
+                      <Text style={styles.cloudPlaySub}>
+                        Zero Buffering • Fast 1080p • Multi-Subtitles
+                      </Text>
+                    </View>
+                  </View>
+                  <Ionicons name="play-circle" size={32} color="#E50914" />
+                </TouchableOpacity>
+              )}
+
               {/* TV Show Seasons & Episodes (if series) */}
               {details?.mediaType === 'tv' && details.seasons?.length > 0 && (
                 <View style={styles.episodesSection}>
@@ -571,6 +606,45 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     fontWeight: '600'
+  },
+  cloudPlayBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1e1e1e',
+    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#333'
+  },
+  cloudPlayLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12
+  },
+  cloudPlayIconWrap: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: '#fff',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  cloudPlayTextWrap: {
+    flex: 1
+  },
+  cloudPlayTitle: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '700'
+  },
+  cloudPlaySub: {
+    color: '#aaa',
+    fontSize: 11,
+    marginTop: 2
   },
   streamActionRow: {
     flexDirection: 'row',
