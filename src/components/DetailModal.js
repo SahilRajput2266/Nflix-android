@@ -49,6 +49,8 @@ export default function DetailModal({
     setLoadingStreams(true);
     setStreams([]);
     setAudioFilter('all');
+    setSelectedSeason(1);
+    setSelectedEpisode(1);
 
     fetchMediaDetails(media.id, media.mediaType).then(async (data) => {
       setDetails(data);
@@ -71,8 +73,9 @@ export default function DetailModal({
   const handleEpisodeSelect = async (ep) => {
     setSelectedEpisode(ep.episodeNumber);
     setLoadingStreams(true);
-    if (details?.imdbId) {
-      const torrents = await fetchTorrentStreams(details.imdbId, 'tv', selectedSeason, ep.episodeNumber);
+    const imdb = details?.imdbId || media?.imdbId;
+    if (imdb) {
+      const torrents = await fetchTorrentStreams(imdb, 'tv', selectedSeason, ep.episodeNumber);
       setStreams(torrents);
     }
     setLoadingStreams(false);
@@ -84,13 +87,33 @@ export default function DetailModal({
     if (media) {
       const eps = await fetchTvSeasonEpisodes(media.id, sNum);
       setEpisodes(eps);
-      if (details?.imdbId) {
+      const imdb = details?.imdbId || media?.imdbId;
+      if (imdb) {
         setLoadingStreams(true);
-        const torrents = await fetchTorrentStreams(details.imdbId, 'tv', sNum, 1);
+        const torrents = await fetchTorrentStreams(imdb, 'tv', sNum, 1);
         setStreams(torrents);
         setLoadingStreams(false);
       }
     }
+  };
+
+  const handlePlayCloud = (epNum = selectedEpisode) => {
+    if (!playFn) return;
+    const itemData = details || media;
+    const epObj = episodes.find((e) => e.episodeNumber === epNum);
+    const epTitle = epObj ? ' - S' + selectedSeason + 'E' + epNum + ': ' + epObj.name : '';
+
+    playFn(
+      itemData,
+      {
+        isCloudStream: true,
+        title: (itemData.title || 'Video') + epTitle,
+        id: itemData.id,
+        imdbId: itemData.imdbId
+      },
+      selectedSeason,
+      epNum
+    );
   };
 
   const handleDownload = async (stream) => {
@@ -100,7 +123,6 @@ export default function DetailModal({
       return;
     }
 
-    // Always copy link to clipboard first so user has it immediately
     await Clipboard.setStringAsync(downloadUri);
 
     if (downloadUri.startsWith('http')) {
@@ -108,13 +130,12 @@ export default function DetailModal({
       return;
     }
 
-    // Direct open without canOpenURL check (bypasses Android 11+ package visibility restriction)
     try {
       await Linking.openURL(downloadUri);
     } catch {
       Alert.alert(
         '📥 Magnet Link Copied!',
-        'The torrent magnet link has been copied to your clipboard.\n\nTo download this movie file directly to your phone storage, open any downloader app (like 1DM, Flud, or TorrDroid) and paste the link.\n\nOr tap below to get 1DM from Google Play Store.',
+        'The torrent magnet link has been copied to your clipboard.\n\nTo download this movie directly to your phone storage, open any downloader app (like 1DM, Flud, or TorrDroid) and paste the link.\n\nOr tap below to get 1DM from Google Play Store.',
         [
           {
             text: 'Install 1DM (Play Store)',
@@ -196,6 +217,8 @@ export default function DetailModal({
     return true;
   });
 
+  const isTvShow = (details?.mediaType || media?.mediaType) === 'tv';
+
   return (
     <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
       <SafeAreaView style={styles.container}>
@@ -237,7 +260,7 @@ export default function DetailModal({
                   </Text>
                 ) : null}
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>HD</Text>
+                  <Text style={styles.badgeText}>{isTvShow ? 'TV SERIES' : 'MOVIE'}</Text>
                 </View>
               </View>
 
@@ -270,100 +293,149 @@ export default function DetailModal({
                 </View>
               )}
 
-              {/* Instant Cloud Stream Banner (Zero Buffering & Multi-Audio/Hindi) */}
+              {/* Instant Cloud Stream Banner */}
               <TouchableOpacity
                 style={styles.cloudPlayBanner}
                 activeOpacity={0.85}
-                onPress={() =>
-                  playFn &&
-                  playFn(
-                    details || media,
-                    {
-                      isCloudStream: true,
-                      title: details?.title || media.title,
-                      id: (details || media).id,
-                      imdbId: details?.imdbId || media.imdbId
-                    },
-                    selectedSeason,
-                    selectedEpisode
-                  )
-                }
+                onPress={() => handlePlayCloud(selectedEpisode)}
               >
                 <View style={styles.cloudPlayLeft}>
                   <View style={styles.cloudPlayIconWrap}>
                     <Ionicons name="flash" size={20} color="#000" />
                   </View>
                   <View style={styles.cloudPlayTextWrap}>
-                    <Text style={styles.cloudPlayTitle}>Play Instant HD (Cloud)</Text>
+                    <Text style={styles.cloudPlayTitle}>
+                      {isTvShow ? 'Play S' + selectedSeason + ' Ep ' + selectedEpisode + ' (Cloud HD)' : 'Play Instant HD (Cloud)'}
+                    </Text>
                     <Text style={styles.cloudPlaySub}>
-                      ⚡ Zero Buffering • 🇮🇳 Multi-Audio & Hindi • Subtitles
+                      ⚡ Zero Buffering • 🇮🇳 Hindi Audio & Subtitles
                     </Text>
                   </View>
                 </View>
                 <Ionicons name="play-circle" size={34} color="#E50914" />
               </TouchableOpacity>
 
-              {/* TV Show Seasons & Episodes (if series) */}
-              {details?.mediaType === 'tv' && details.seasons?.length > 0 && (
+              {/* Netflix-Style TV Show Episodes with Thumbnails */}
+              {isTvShow && (
                 <View style={styles.episodesSection}>
-                  <Text style={styles.sectionHeading}>Episodes</Text>
+                  <View style={styles.episodesHeaderRow}>
+                    <Text style={styles.sectionHeading}>Episodes</Text>
+                    {episodes.length > 0 && (
+                      <Text style={styles.episodesSubCount}>{episodes.length} Episodes</Text>
+                    )}
+                  </View>
 
-                  {/* Season Selector */}
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    style={styles.seasonList}
-                  >
-                    {details.seasons.map((s) => (
-                      <TouchableOpacity
-                        key={s.id}
-                        style={[
-                          styles.seasonTab,
-                          selectedSeason === s.season_number && styles.seasonTabActive
-                        ]}
-                        onPress={() => handleSeasonChange(s.season_number)}
-                      >
-                        <Text
+                  {/* Season Selector Tabs */}
+                  {details?.seasons?.length > 1 && (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.seasonList}
+                    >
+                      {details.seasons.map((s) => (
+                        <TouchableOpacity
+                          key={s.id || s.season_number}
                           style={[
-                            styles.seasonTabText,
-                            selectedSeason === s.season_number && styles.seasonTabTextActive
+                            styles.seasonTab,
+                            selectedSeason === s.season_number && styles.seasonTabActive
+                          ]}
+                          onPress={() => handleSeasonChange(s.season_number)}
+                        >
+                          <Text
+                            style={[
+                              styles.seasonTabText,
+                              selectedSeason === s.season_number && styles.seasonTabTextActive
+                            ]}
+                          >
+                            Season {s.season_number}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </ScrollView>
+                  )}
+
+                  {/* Episodes Vertical Cards List with Thumbnails */}
+                  <View style={styles.episodeListWrap}>
+                    {episodes.map((ep) => {
+                      const isCurrent = selectedEpisode === ep.episodeNumber;
+                      const thumbUri = ep.still || media.backdrop || media.poster;
+
+                      return (
+                        <View
+                          key={ep.id || ep.episodeNumber}
+                          style={[
+                            styles.episodeCard,
+                            isCurrent && styles.episodeCardSelected
                           ]}
                         >
-                          Season {s.season_number}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                          {/* Episode Thumbnail + Info Row */}
+                          <TouchableOpacity
+                            style={styles.episodeMainRow}
+                            activeOpacity={0.8}
+                            onPress={() => handleEpisodeSelect(ep)}
+                          >
+                            <View style={styles.episodeThumbWrap}>
+                              <Image
+                                source={{ uri: thumbUri }}
+                                style={styles.episodeThumb}
+                                resizeMode="cover"
+                              />
+                              <View style={styles.episodePlayOverlay}>
+                                <Ionicons name="play" size={16} color="#fff" />
+                              </View>
+                              {ep.runtime ? (
+                                <View style={styles.episodeDurationBadge}>
+                                  <Text style={styles.episodeDurationText}>{ep.runtime}m</Text>
+                                </View>
+                              ) : null}
+                            </View>
 
-                  {/* Episodes Horizontal Picker */}
-                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
-                    {episodes.map((ep) => (
-                      <TouchableOpacity
-                        key={ep.id}
-                        style={[
-                          styles.epPill,
-                          selectedEpisode === ep.episodeNumber && styles.epPillActive
-                        ]}
-                        onPress={() => handleEpisodeSelect(ep)}
-                      >
-                        <Text
-                          style={[
-                            styles.epPillText,
-                            selectedEpisode === ep.episodeNumber && styles.epPillTextActive
-                          ]}
-                        >
-                          Ep {ep.episodeNumber}
-                        </Text>
-                      </TouchableOpacity>
-                    ))}
-                  </ScrollView>
+                            <View style={styles.episodeInfo}>
+                              <Text style={styles.episodeTitle} numberOfLines={1}>
+                                {ep.episodeNumber}. {ep.name || ('Episode ' + ep.episodeNumber)}
+                              </Text>
+                              <Text style={styles.episodeOverview} numberOfLines={2}>
+                                {ep.overview || 'Tap to choose playback options below.'}
+                              </Text>
+                            </View>
+                          </TouchableOpacity>
+
+                          {/* 2 Clear Play Option Buttons for each Episode */}
+                          <View style={styles.episodeActionRow}>
+                            <TouchableOpacity
+                              style={styles.episodeCloudBtn}
+                              onPress={() => handlePlayCloud(ep.episodeNumber)}
+                            >
+                              <Ionicons name="flash" size={13} color="#fff" />
+                              <Text style={styles.episodeCloudBtnText}>⚡ Play Cloud HD</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                              style={[
+                                styles.episodeTorrentsBtn,
+                                isCurrent && styles.episodeTorrentsBtnActive
+                              ]}
+                              onPress={() => handleEpisodeSelect(ep)}
+                            >
+                              <Ionicons name="filter" size={12} color={isCurrent ? '#fff' : '#aaa'} />
+                              <Text style={[styles.episodeTorrentsBtnText, isCurrent && styles.episodeTorrentsBtnTextActive]}>
+                                {isCurrent ? 'Torrents Below ▾' : 'View Torrents'}
+                              </Text>
+                            </TouchableOpacity>
+                          </View>
+                        </View>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
               {/* Torrent Streams Section */}
               <View style={styles.torrentSection}>
                 <View style={styles.streamHeaderRow}>
-                  <Text style={styles.sectionHeading}>Available Torrent Streams</Text>
+                  <Text style={styles.sectionHeading}>
+                    {isTvShow ? ('Torrents for S' + selectedSeason + ' Ep ' + selectedEpisode) : 'Available Torrent Streams'}
+                  </Text>
                   <Text style={styles.streamCountBadge}>{streams.length} Found</Text>
                 </View>
 
@@ -414,7 +486,7 @@ export default function DetailModal({
                     <Text style={styles.streamLoadingText}>Searching active torrent swarms & seeds...</Text>
                   </View>
                 ) : filteredStreams.length === 0 ? (
-                  <Text style={styles.noStreamsText}>No torrent streams found for this filter.</Text>
+                  <Text style={styles.noStreamsText}>No torrent streams found for this selection.</Text>
                 ) : (
                   filteredStreams.map((stream, idx) => (
                     <View key={stream.id || idx} style={styles.streamCard}>
@@ -648,23 +720,32 @@ const styles = StyleSheet.create({
     marginTop: 2
   },
   episodesSection: {
-    marginTop: 16,
+    marginTop: 20,
     borderTopWidth: 1,
     borderTopColor: '#262626',
     paddingTop: 16
+  },
+  episodesHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10
   },
   sectionHeading: {
     color: '#fff',
     fontSize: 17,
     fontWeight: '700'
   },
+  episodesSubCount: {
+    color: '#888',
+    fontSize: 12
+  },
   seasonList: {
     flexDirection: 'row',
-    marginTop: 10,
-    marginBottom: 12
+    marginBottom: 14
   },
   seasonTab: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 14,
     backgroundColor: '#222',
@@ -682,26 +763,116 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontWeight: '700'
   },
-  epPill: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    backgroundColor: '#1f1f1f',
-    borderRadius: 6,
-    marginRight: 8,
+  episodeListWrap: {
+    gap: 12
+  },
+  episodeCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 8,
+    padding: 10,
     borderWidth: 1,
-    borderColor: '#333'
+    borderColor: '#282828'
   },
-  epPillActive: {
+  episodeCardSelected: {
     borderColor: '#E50914',
-    backgroundColor: '#2a1515'
+    backgroundColor: '#221616'
   },
-  epPillText: {
+  episodeMainRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  episodeThumbWrap: {
+    width: 110,
+    height: 65,
+    borderRadius: 6,
+    overflow: 'hidden',
+    position: 'relative',
+    backgroundColor: '#262626'
+  },
+  episodeThumb: {
+    width: '100%',
+    height: '100%'
+  },
+  episodePlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  episodeDurationBadge: {
+    position: 'absolute',
+    bottom: 4,
+    right: 4,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 3
+  },
+  episodeDurationText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700'
+  },
+  episodeInfo: {
+    flex: 1
+  },
+  episodeTitle: {
+    color: '#fff',
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 4
+  },
+  episodeOverview: {
+    color: '#999',
+    fontSize: 11,
+    lineHeight: 16
+  },
+  episodeActionRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: '#242424'
+  },
+  episodeCloudBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#E50914',
+    paddingVertical: 6,
+    borderRadius: 5
+  },
+  episodeCloudBtnText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  episodeTorrentsBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    backgroundColor: '#262626',
+    paddingVertical: 6,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: '#383838'
+  },
+  episodeTorrentsBtnActive: {
+    borderColor: '#E50914'
+  },
+  episodeTorrentsBtnText: {
     color: '#ccc',
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600'
   },
-  epPillTextActive: {
-    color: '#E50914',
+  episodeTorrentsBtnTextActive: {
+    color: '#fff',
     fontWeight: '700'
   },
   torrentSection: {

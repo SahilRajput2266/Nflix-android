@@ -29,7 +29,7 @@ export default function PlayerModal({
   const [loading, setLoading] = useState(true);
   const [selectedServer, setSelectedServer] = useState('vidlink');
   const [isLandscape, setIsLandscape] = useState(false);
-  const [isCloud, setIsCloud] = useState(false);
+  const [isCloud, setIsCloud] = useState(Boolean(stream?.isCloudStream));
 
   useEffect(() => {
     if (visible) {
@@ -601,6 +601,13 @@ export default function PlayerModal({
               allowsFullscreenVideo={true}
               allowsInlineMediaPlayback={true}
               mediaPlaybackRequiresUserAction={false}
+              setSupportMultipleWindows={false}
+              onShouldStartLoadWithRequest={(req) => {
+                const u = req.url || '';
+                return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('about:');
+              }}
+              onError={(e) => console.warn('WebView load error:', e.nativeEvent)}
+              onRenderProcessGone={(e) => console.warn('WebView render process gone:', e.nativeEvent)}
               userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               onLoadStart={() => setLoading(true)}
               onLoadEnd={() => setLoading(false)}
