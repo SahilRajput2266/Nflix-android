@@ -136,7 +136,7 @@ export default function DetailModal({
                   {details.director}
                 </Text>
               )}
-              {details?.cast ? (
+              {details?.cast && (
                 <Text style={styles.infoLine}>
                   <Text style={styles.infoLabel}>Starring: </Text>
                   {details.cast}
