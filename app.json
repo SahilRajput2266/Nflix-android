@@ -20,6 +20,12 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "c1ad5860-6e6b-4b1e-9d03-c3b18934da3a"
+      }
+    },
+    "owner": "sahil2266"
   }
 }
