@@ -166,8 +166,8 @@ export default function DetailModal({
     // If direct HTTP link, launch VLC view intent immediately
     if (uri.startsWith('http')) {
       const vlcIntent = Platform.OS === 'android'
-        ? \`intent:\${encodeURI(uri)}#Intent;package=org.videolan.vlc;type=video/*;action=android.intent.action.VIEW;end\`
-        : \`vlc://\${uri}\`;
+        ? ('intent:' + encodeURI(uri) + '#Intent;package=org.videolan.vlc;type=video/*;action=android.intent.action.VIEW;end')
+        : ('vlc://' + uri);
       try {
         await Linking.openURL(vlcIntent);
         return;
