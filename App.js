@@ -106,13 +106,18 @@ export default function App() {
   };
 
   const openPlayer = (item, stream, season = 1, episode = 1) => {
-    setDetailVisible(false);
-    setPlayerItem(item);
-    setCurrentStream(stream);
-    setCurrentSeason(season);
-    setCurrentEpisode(episode);
-    setPlayerVisible(true);
-    recordHistory(item, season, episode);
+    try {
+      if (!item) return;
+      setDetailVisible(false);
+      setPlayerItem(item);
+      setCurrentStream(stream || { isCloudStream: true });
+      setCurrentSeason(season || 1);
+      setCurrentEpisode(episode || 1);
+      setPlayerVisible(true);
+      recordHistory(item, season, episode).catch(() => {});
+    } catch (e) {
+      console.warn('Error in openPlayer:', e);
+    }
   };
 
   const handleToggleWatchlist = async (item) => {
@@ -126,7 +131,7 @@ export default function App() {
     <SafeAreaView style={styles.safeContainer}>
       <StatusBar barStyle="light-content" backgroundColor="#141414" />
 
-      {/* Top Netflix Header */}
+      {/* Top NFlix Header */}
       <View style={styles.header}>
         <View style={styles.brandWrap}>
           <Image
@@ -357,7 +362,11 @@ export default function App() {
         stream={currentStream}
         season={currentSeason}
         episode={currentEpisode}
-        onClose={() => setPlayerVisible(false)}
+        onClose={() => {
+          setPlayerVisible(false);
+          setCurrentStream(null);
+          setPlayerItem(null);
+        }}
         onNextEpisode={() => {
           const nextEp = currentEpisode + 1;
           setCurrentEpisode(nextEp);

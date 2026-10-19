@@ -10,12 +10,32 @@ import {
   Platform,
   ActivityIndicator,
   Linking,
-  Alert
+  Alert,
+  ScrollView
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
 import * as ScreenOrientation from 'expo-screen-orientation';
 import * as Clipboard from 'expo-clipboard';
+
+const AD_BLOCK_USER_SCRIPT = `
+  (function() {
+    window.open = function() { return null; };
+    window.alert = function() { return null; };
+    window.confirm = function() { return true; };
+    document.addEventListener('click', function(e) {
+      var target = e.target;
+      while (target && target.tagName) {
+        if (target.tagName === 'A' && target.target === '_blank') {
+          target.removeAttribute('target');
+        }
+        target = target.parentElement;
+      }
+    }, true);
+  })();
+  true;
+`;
+
 
 export default function PlayerModal({
   visible,
@@ -30,6 +50,7 @@ export default function PlayerModal({
   const [selectedServer, setSelectedServer] = useState('vidlink');
   const [isLandscape, setIsLandscape] = useState(false);
   const [isCloud, setIsCloud] = useState(Boolean(stream?.isCloudStream));
+  const isCloudActive = Boolean(stream?.isCloudStream) || isCloud;
 
   useEffect(() => {
     if (visible) {
@@ -126,13 +147,18 @@ export default function PlayerModal({
   const getEmbedUrl = (srv) => {
     if (srv === 'vidlink') {
       return isTv
-        ? `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?primaryColor=e50914&secondaryColor=ffffff`
-        : `https://vidlink.pro/movie/${tmdbId}?primaryColor=e50914&secondaryColor=ffffff`;
+        ? `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?primaryColor=e50914&autoplay=true`
+        : `https://vidlink.pro/movie/${tmdbId}?primaryColor=e50914&autoplay=true`;
     }
     if (srv === 'superembed') {
       return isTv
         ? `https://superembed.stream/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`
         : `https://superembed.stream/?video_id=${tmdbId}&tmdb=1`;
+    }
+    if (srv === 'autoembed') {
+      return isTv
+        ? `https://player.autoembed.cc/embed/tv/${tmdbId}/${season}/${episode}`
+        : `https://player.autoembed.cc/embed/movie/${tmdbId}`;
     }
     if (srv === 'vidsrcto') {
       return isTv
@@ -140,11 +166,33 @@ export default function PlayerModal({
         : `https://vidsrc.to/embed/movie/${tmdbId}`;
     }
     return isTv
-      ? `https://multiembed.mov/?video_id=${imdbId}&s=${season}&e=${episode}`
-      : `https://multiembed.mov/?video_id=${imdbId}`;
+      ? `https://multiembed.mov/?video_id=${imdbId || tmdbId}&tmdb=1&s=${season}&e=${episode}`
+      : `https://multiembed.mov/?video_id=${imdbId || tmdbId}&tmdb=1`;
   };
 
-  const currentEmbedUrl = stream.embedUrl || getEmbedUrl(selectedServer);
+  const currentEmbedUrl = (stream && stream.embedUrl) || getEmbedUrl(selectedServer);
+
+  const cloudIframeHtml = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    html, body { width:100%; height:100%; background:#000; overflow:hidden; }
+    iframe { width:100%; height:100%; border:none; display:block; }
+  </style>
+</head>
+<body>
+  <iframe
+    src="${currentEmbedUrl}"
+    allowfullscreen="true"
+    webkitallowfullscreen="true"
+    mozallowfullscreen="true"
+    allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+  ></iframe>
+</body>
+</html>`;
 
   // Clean, non-overlapping HTML5 Video Player with smooth touch controls & fallback card
   const clientPlayerHtml = `
@@ -438,6 +486,12 @@ export default function PlayerModal({
             subMsg.innerText = 'Synchronizing audio & video';
           });
 
+          window.addEventListener('beforeunload', function() {
+            if (window.wtClient) {
+              try { window.wtClient.destroy(); } catch(e) {}
+            }
+          });
+
           videoElem.addEventListener('playing', function() {
             statusWrap.style.display = 'none';
             noPeersCard.style.display = 'none';
@@ -462,15 +516,24 @@ export default function PlayerModal({
               }
             }, 10000);
 
-            var client = new WebTorrent({ maxConns: 55 });
-            client.add(magnetUri, function(torrent) {
-              mainMsg.innerText = 'Metadata Received! Finding video track...';
+            var client = new WebTorrent({
+              maxConns: 25,
+              destroyStoreOnDestroy: true
+            });
+            window.wtClient = client;
+
+            client.add(magnetUri, { destroyStoreOnDestroy: true }, function(torrent) {
+              // CRITICAL: Deselect all files so WebTorrent NEVER downloads the full 10-50GB movie into device memory/storage!
+              // Only pieces actively needed for immediate playback will be streamed.
+              torrent.deselect();
+
+              mainMsg.innerText = 'Metadata Received! Streaming live on-demand...';
               var file = torrent.files.find(function(f) {
-                return /\\.(mp4|mkv|webm)$/i.test(f.name);
+                return /\.(mp4|mkv|webm)$/i.test(f.name);
               }) || torrent.files[0];
 
               if (file) {
-                mainMsg.innerText = 'Buffering: ' + file.name;
+                mainMsg.innerText = 'Live Streaming: ' + file.name;
                 file.renderTo(videoElem, { autoplay: true }, function(err) {
                   if (err) {
                     mainMsg.innerText = 'Playback Error: ' + err.message;
@@ -514,11 +577,11 @@ export default function PlayerModal({
 
           <View style={styles.headerInfo}>
             <Text style={styles.title} numberOfLines={1}>
-              {item.title}
+              {item.title || item.name || 'Now Playing'}
             </Text>
             <Text style={styles.subBadge}>
               {isTv ? `S${season} E${episode}` : '1080p Full HD'}
-              {isCloud ? ' • ⚡ Cloud Multi-Audio' : ' • P2P Stream'}
+              {isCloudActive ? ' • ⚡ Cloud Multi-Audio' : ' • P2P Stream'}
             </Text>
           </View>
 
@@ -536,7 +599,7 @@ export default function PlayerModal({
         </View>
 
         {/* Cloud Stream Multi-Server Switcher */}
-        {isCloud && (
+        {isCloudActive && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.serverRow}>
             <TouchableOpacity
               style={[styles.serverChip, selectedServer === 'vidlink' && styles.serverChipActive]}
@@ -546,7 +609,7 @@ export default function PlayerModal({
               }}
             >
               <Text style={[styles.serverChipText, selectedServer === 'vidlink' && styles.serverChipTextActive]}>
-                🇮🇳 Server 1 (VidLink - Multi-Audio & Hindi)
+                ⚡ Server 1 (VidLink Pro - Hindi)
               </Text>
             </TouchableOpacity>
 
@@ -558,7 +621,19 @@ export default function PlayerModal({
               }}
             >
               <Text style={[styles.serverChipText, selectedServer === 'superembed' && styles.serverChipTextActive]}>
-                ⚡ Server 2 (SuperEmbed)
+                ⚡ Server 2 (SuperEmbed HD)
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.serverChip, selectedServer === 'autoembed' && styles.serverChipActive]}
+              onPress={() => {
+                setLoading(true);
+                setSelectedServer('autoembed');
+              }}
+            >
+              <Text style={[styles.serverChipText, selectedServer === 'autoembed' && styles.serverChipTextActive]}>
+                ⚡ Server 3 (AutoEmbed FHD)
               </Text>
             </TouchableOpacity>
 
@@ -570,7 +645,7 @@ export default function PlayerModal({
               }}
             >
               <Text style={[styles.serverChipText, selectedServer === 'vidsrcto' && styles.serverChipTextActive]}>
-                🚀 Server 3 (VidSrc HD)
+                ⚡ Server 4 (VidSrc HD)
               </Text>
             </TouchableOpacity>
 
@@ -582,7 +657,7 @@ export default function PlayerModal({
               }}
             >
               <Text style={[styles.serverChipText, selectedServer === 'multiembed' && styles.serverChipTextActive]}>
-                🌐 Server 4 (MultiEmbed)
+                ⚡ Server 5 (MultiEmbed Hindi)
               </Text>
             </TouchableOpacity>
           </ScrollView>
@@ -590,7 +665,7 @@ export default function PlayerModal({
 
         {/* Player Container */}
         <View style={styles.playerContainer}>
-          {isCloud ? (
+          {isCloudActive ? (
             <WebView
               key={selectedServer + '_' + (isTv ? `${season}_${episode}` : 'movie')}
               originWhitelist={['*']}
@@ -602,13 +677,25 @@ export default function PlayerModal({
               allowsInlineMediaPlayback={true}
               mediaPlaybackRequiresUserAction={false}
               setSupportMultipleWindows={false}
+              injectedJavaScriptBeforeContentLoaded={AD_BLOCK_USER_SCRIPT}
+              injectedJavaScript={AD_BLOCK_USER_SCRIPT}
+              userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               onShouldStartLoadWithRequest={(req) => {
                 const u = req.url || '';
-                return u.startsWith('http://') || u.startsWith('https://') || u.startsWith('about:');
+                // Block android intent://, market://, and custom schemes that crash Android WebView
+                if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('about:')) {
+                  return false;
+                }
+                return true;
               }}
-              onError={(e) => console.warn('WebView load error:', e.nativeEvent)}
-              onRenderProcessGone={(e) => console.warn('WebView render process gone:', e.nativeEvent)}
-              userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+              onRenderProcessGone={(e) => {
+                console.warn('Cloud WebView render process recovered');
+                return true;
+              }}
+              onError={(e) => {
+                console.warn('Cloud WebView error:', e.nativeEvent);
+                setLoading(false);
+              }}
               onLoadStart={() => setLoading(true)}
               onLoadEnd={() => setLoading(false)}
             />
@@ -647,7 +734,7 @@ export default function PlayerModal({
         {/* Footer Info (Hidden in landscape) */}
         {!isLandscape && (
           <View style={styles.footer}>
-            {isCloud ? (
+            {isCloudActive ? (
               <View style={styles.footerMeta}>
                 <Text style={[styles.footerMetaText, { color: '#46d369', fontWeight: '700' }]}>
                   ⚡ Direct Cloud Stream (Zero Buffering)

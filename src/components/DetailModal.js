@@ -98,22 +98,28 @@ export default function DetailModal({
   };
 
   const handlePlayCloud = (epNum = selectedEpisode) => {
-    if (!playFn) return;
-    const itemData = details || media;
-    const epObj = episodes.find((e) => e.episodeNumber === epNum);
-    const epTitle = epObj ? ' - S' + selectedSeason + 'E' + epNum + ': ' + epObj.name : '';
+    try {
+      const fn = playFn || onPlayStream || onPlay;
+      if (!fn) return;
+      const itemData = details || media || {};
+      const epObj = (episodes || []).find((e) => e.episodeNumber === epNum);
+      const epTitle = epObj ? ' - S' + selectedSeason + 'E' + epNum + ': ' + (epObj.name || '') : '';
 
-    playFn(
-      itemData,
-      {
-        isCloudStream: true,
-        title: (itemData.title || 'Video') + epTitle,
-        id: itemData.id,
-        imdbId: itemData.imdbId
-      },
-      selectedSeason,
-      epNum
-    );
+      fn(
+        itemData,
+        {
+          isCloudStream: true,
+          title: (itemData.title || itemData.name || 'Video') + epTitle,
+          id: itemData.id,
+          imdbId: itemData.imdbId || (media && media.imdbId) || null,
+          mediaType: itemData.mediaType || media?.mediaType || (isTvShow ? 'tv' : 'movie')
+        },
+        selectedSeason,
+        epNum
+      );
+    } catch (err) {
+      console.warn('handlePlayCloud error:', err);
+    }
   };
 
   const handleDownload = async (stream) => {
@@ -315,7 +321,7 @@ export default function DetailModal({
                 <Ionicons name="play-circle" size={34} color="#E50914" />
               </TouchableOpacity>
 
-              {/* Netflix-Style TV Show Episodes with Thumbnails */}
+              {/* NFlix-Style TV Show Episodes with Thumbnails */}
               {isTvShow && (
                 <View style={styles.episodesSection}>
                   <View style={styles.episodesHeaderRow}>
