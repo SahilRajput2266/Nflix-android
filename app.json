@@ -1,10 +1,10 @@
 {
   "expo": {
-    "name": "NFlix",
+    "name": "Streamix",
     "slug": "nflix-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/outer_logo.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
@@ -15,7 +15,8 @@
         "INTERNET"
       ],
       "adaptiveIcon": {
-        "backgroundColor": "#141414"
+        "foregroundImage": "./assets/outer_logo.png",
+        "backgroundColor": "#0c0d14"
       }
     },
     "web": {
@@ -26,6 +27,11 @@
         "projectId": "c1ad5860-6e6b-4b1e-9d03-c3b18934da3a"
       }
     },
-    "owner": "sahil2266"
+    "owner": "sahil2266",
+    "splash": {
+      "image": "./assets/inner_logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#000000"
+    }
   }
 }

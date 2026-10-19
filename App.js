@@ -128,8 +128,11 @@ export default function App() {
       {/* Top Netflix Header */}
       <View style={styles.header}>
         <View style={styles.brandWrap}>
-          <Text style={styles.brandN}>N</Text>
-          <Text style={styles.brandText}>FLIX</Text>
+          <Image
+            source={require('./assets/inner_logo.png')}
+            style={styles.brandLogo}
+            resizeMode="contain"
+          />
         </View>
 
         <View style={styles.headerTabs}>
@@ -193,7 +196,7 @@ export default function App() {
       {loading ? (
         <View style={styles.centeredLoader}>
           <ActivityIndicator size="large" color="#E50914" />
-          <Text style={styles.loaderText}>Loading NFlix...</Text>
+          <Text style={styles.loaderText}>Loading Streamix...</Text>
         </View>
       ) : activeTab === 'search' ? (
         /* Search Grid */
@@ -403,20 +406,12 @@ const styles = StyleSheet.create({
   },
   brandWrap: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+    marginRight: 6
   },
-  brandN: {
-    color: '#E50914',
-    fontSize: 24,
-    fontWeight: '900',
-    letterSpacing: -1
-  },
-  brandText: {
-    color: '#fff',
-    fontSize: 17,
-    fontWeight: '800',
-    letterSpacing: 2,
-    marginLeft: 1
+  brandLogo: {
+    width: 38,
+    height: 38
   },
   headerTabs: {
     flexDirection: 'row',
