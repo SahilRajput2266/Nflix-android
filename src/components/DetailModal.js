@@ -11,7 +11,9 @@ import {
   Dimensions,
   SafeAreaView,
   Platform,
-  StatusBar
+  StatusBar,
+  Linking,
+  Alert
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
@@ -244,34 +246,53 @@ export default function DetailModal({
                   <Text style={styles.noStreamsText}>No torrent streams found for this title.</Text>
                 ) : (
                   streams.map((stream, idx) => (
-                    <TouchableOpacity
-                      key={stream.id || idx}
-                      style={styles.streamCard}
-                      onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
-                    >
-                      <View style={styles.streamTopLine}>
-                        <View style={[styles.qualityBadge, stream.quality.includes('4K') && styles.quality4k]}>
-                          <Text style={styles.qualityText}>{stream.quality}</Text>
+                    <View key={stream.id || idx} style={styles.streamCard}>
+                      <TouchableOpacity
+                        activeOpacity={0.7}
+                        onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
+                      >
+                        <View style={styles.streamTopLine}>
+                          <View style={[styles.qualityBadge, stream.quality.includes('4K') && styles.quality4k]}>
+                            <Text style={styles.qualityText}>{stream.quality}</Text>
+                          </View>
+                          <Text style={styles.audioBadgeText}>{stream.audioBadge}</Text>
                         </View>
-                        <Text style={styles.audioBadgeText}>{stream.audioBadge}</Text>
-                      </View>
 
-                      <Text style={styles.streamTitleText} numberOfLines={2}>
-                        {stream.title}
-                      </Text>
+                        <Text style={styles.streamTitleText} numberOfLines={2}>
+                          {stream.title}
+                        </Text>
 
-                      <View style={styles.streamMetaRow}>
-                        {stream.size ? (
-                          <Text style={styles.streamMetaItem}>💾 {stream.size}</Text>
-                        ) : null}
-                        <Text style={styles.streamMetaItem}>👤 {stream.seeders} Seeders</Text>
-                        {stream.url ? (
-                          <Text style={[styles.streamMetaItem, { color: '#46d369', fontWeight: '700' }]}>⚡ Direct High-Speed</Text>
-                        ) : (
-                          <Text style={[styles.streamMetaItem, { color: '#00a8ff' }]}>P2P Swarm</Text>
-                        )}
+                        <View style={styles.streamMetaRow}>
+                          {stream.size ? (
+                            <Text style={styles.streamMetaItem}>💾 {stream.size}</Text>
+                          ) : null}
+                          <Text style={styles.streamMetaItem}>👤 {stream.seeders} Seeders</Text>
+                          {stream.url ? (
+                            <Text style={[styles.streamMetaItem, { color: '#46d369', fontWeight: '700' }]}>⚡ Direct High-Speed</Text>
+                          ) : (
+                            <Text style={[styles.streamMetaItem, { color: '#00a8ff' }]}>P2P Swarm</Text>
+                          )}
+                        </View>
+                      </TouchableOpacity>
+
+                      <View style={styles.streamActionRow}>
+                        <TouchableOpacity
+                          style={styles.streamPlayBtn}
+                          onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
+                        >
+                          <Ionicons name="play" size={14} color="#000" />
+                          <Text style={styles.streamPlayBtnText}>Watch Now</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={styles.streamDownloadBtn}
+                          onPress={() => handleDownload(stream)}
+                        >
+                          <Ionicons name="download-outline" size={15} color="#fff" />
+                          <Text style={styles.streamDownloadBtnText}>Download</Text>
+                        </TouchableOpacity>
                       </View>
-                    </TouchableOpacity>
+                    </View>
                   ))
                 )}
               </View>
@@ -550,5 +571,46 @@ const styles = StyleSheet.create({
     color: '#888',
     fontSize: 11,
     fontWeight: '600'
+  }
+  streamActionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 10,
+    paddingTop: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#282828'
+  },
+  streamPlayBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 6
+  },
+  streamPlayBtnText: {
+    color: '#000',
+    fontWeight: '700',
+    fontSize: 13
+  },
+  streamDownloadBtn: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#262626',
+    paddingVertical: 8,
+    borderRadius: 6,
+    gap: 6,
+    borderWidth: 1,
+    borderColor: '#3e3e3e'
+  },
+  streamDownloadBtnText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 13
   }
 });
