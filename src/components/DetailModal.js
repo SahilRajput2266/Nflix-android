@@ -136,25 +136,47 @@ export default function DetailModal({
 
     await Clipboard.setStringAsync(uri);
 
-    try {
-      await Linking.openURL(uri);
-    } catch {
-      Alert.alert(
-        '⚡ VLC / MX Player',
-        'Stream link copied to clipboard!\n\nTo play torrent streams with hardware acceleration and Hindi dual-audio selection, open VLC > "Open Network Stream" and paste the link, or install VLC from Play Store.',
-        [
-          {
-            text: 'Install VLC (Play Store)',
-            onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=org.videolan.vlc')
-          },
-          {
-            text: 'Install 1DM (Play Store)',
-            onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager')
-          },
-          { text: 'OK', style: 'cancel' }
-        ]
-      );
-    }
+    Alert.alert(
+      '⚡ VLC / External Player',
+      'Stream link copied to clipboard! Choose an option:',
+      [
+        {
+          text: '🎬 Launch VLC Player',
+          onPress: async () => {
+            const vlcIntent = Platform.OS === 'android'
+              ? 'intent:#Intent;package=org.videolan.vlc;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end'
+              : 'vlc://';
+            try {
+              await Linking.openURL(vlcIntent);
+            } catch {
+              try {
+                await Linking.openURL('vlc://');
+              } catch {
+                Alert.alert('VLC Player', 'Could not launch VLC. Please ensure VLC is installed from Play Store.');
+              }
+            }
+          }
+        },
+        {
+          text: '📥 Stream via 1DM / Flud',
+          onPress: async () => {
+            try {
+              await Linking.openURL(uri);
+            } catch {
+              Alert.alert(
+                '1DM Needed',
+                '1DM can stream torrents directly into VLC. Install 1DM from Play Store?',
+                [
+                  { text: 'Get 1DM', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager') },
+                  { text: 'Cancel', style: 'cancel' }
+                ]
+              );
+            }
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
   };
 
   const handleCopyLink = async (stream) => {
