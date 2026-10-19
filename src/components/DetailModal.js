@@ -163,27 +163,22 @@ export default function DetailModal({
 
     await Clipboard.setStringAsync(uri);
 
+    // If direct HTTP link, launch VLC view intent immediately
+    if (uri.startsWith('http')) {
+      const vlcIntent = Platform.OS === 'android'
+        ? \`intent:\${encodeURI(uri)}#Intent;package=org.videolan.vlc;type=video/*;action=android.intent.action.VIEW;end\`
+        : \`vlc://\${uri}\`;
+      try {
+        await Linking.openURL(vlcIntent);
+        return;
+      } catch (e) {}
+    }
+
+    // For magnet links: launch 1DM, TorrDroid, or Flud directly
     Alert.alert(
-      '⚡ VLC / External Player',
-      'Stream link copied to clipboard! Choose an option:',
+      '⚡ VLC / 1DM Direct Stream',
+      'Choose playback method for this stream:\n\n• 1DM can stream torrents into VLC sequentially with zero disk buildup.\n• Or launch VLC Player directly.',
       [
-        {
-          text: '🎬 Launch VLC Player',
-          onPress: async () => {
-            const vlcIntent = Platform.OS === 'android'
-              ? 'intent:#Intent;package=org.videolan.vlc;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end'
-              : 'vlc://';
-            try {
-              await Linking.openURL(vlcIntent);
-            } catch {
-              try {
-                await Linking.openURL('vlc://');
-              } catch {
-                Alert.alert('VLC Player', 'Could not launch VLC. Please ensure VLC is installed from Play Store.');
-              }
-            }
-          }
-        },
         {
           text: '📥 Stream via 1DM / Flud',
           onPress: async () => {
@@ -192,7 +187,7 @@ export default function DetailModal({
             } catch {
               Alert.alert(
                 '1DM Needed',
-                '1DM can stream torrents directly into VLC. Install 1DM from Play Store?',
+                'Install 1DM from Play Store to stream torrents directly into VLC Player?',
                 [
                   { text: 'Get 1DM', onPress: () => Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager') },
                   { text: 'Cancel', style: 'cancel' }
@@ -200,6 +195,25 @@ export default function DetailModal({
               );
             }
           }
+        },
+        {
+          text: '🎬 Launch VLC App',
+          onPress: async () => {
+            const vlcIntent = 'intent:#Intent;package=org.videolan.vlc;action=android.intent.action.MAIN;category=android.intent.category.LAUNCHER;end';
+            try {
+              await Linking.openURL(vlcIntent);
+            } catch {
+              try {
+                await Linking.openURL('vlc://');
+              } catch {
+                Alert.alert('VLC Player', 'Please install VLC Player from Play Store.');
+              }
+            }
+          }
+        },
+        {
+          text: '⚡ Play Instant Cloud HD',
+          onPress: () => handlePlayCloud(selectedEpisode)
         },
         { text: 'Cancel', style: 'cancel' }
       ]

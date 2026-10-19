@@ -10,7 +10,8 @@ import {
   ActivityIndicator,
   Linking,
   Alert,
-  ScrollView
+  ScrollView,
+  Platform
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
@@ -37,12 +38,12 @@ const AD_BLOCK_USER_SCRIPT = `
   true;
 `;
 
+// 4 Verified Working Embed Providers
 const SERVERS = [
-  { id: 'superembed', name: '⚡ Server 1 (SuperEmbed HD)' },
-  { id: '2embed', name: '⚡ Server 2 (2Embed CC - Fast)' },
-  { id: 'vidsrcpm', name: '⚡ Server 3 (VidSrc PM - 1080p)' },
-  { id: 'vidlink', name: '⚡ Server 4 (VidLink Pro - Multi)' },
-  { id: 'vidsrcto', name: '⚡ Server 5 (VidSrc To)' }
+  { id: 'vidsrcto', name: '⚡ Server 1 (VidSrc HD - Primary)' },
+  { id: 'vidsrcpm', name: '⚡ Server 2 (VidSrc PM - 1080p)' },
+  { id: '2embed', name: '⚡ Server 3 (2Embed CC - Fast)' },
+  { id: 'vidlink', name: '⚡ Server 4 (VidLink Pro - Multi)' }
 ];
 
 export default function PlayerModal({
@@ -55,7 +56,7 @@ export default function PlayerModal({
   onNextEpisode
 }) {
   const [loading, setLoading] = useState(true);
-  const [selectedServer, setSelectedServer] = useState('superembed');
+  const [selectedServer, setSelectedServer] = useState('vidsrcto');
   const [isLandscape, setIsLandscape] = useState(false);
   const [isCloud, setIsCloud] = useState(Boolean(stream?.isCloudStream));
   const isCloudActive = Boolean(stream?.isCloudStream) || isCloud;
@@ -74,7 +75,7 @@ export default function PlayerModal({
     };
   }, [visible, stream]);
 
-  // Auto-dismiss loading indicator after 2.5s so user is NEVER stuck on a black screen!
+  // Auto-dismiss loading indicator after 2.5s
   useEffect(() => {
     let timer;
     if (loading) {
@@ -112,32 +113,27 @@ export default function PlayerModal({
   const isTv = (item?.mediaType === 'tv') || (stream?.mediaType === 'tv') || Boolean(item?.name && !item?.title);
 
   const getEmbedUrl = (srv) => {
-    if (srv === 'superembed') {
+    if (srv === 'vidsrcto') {
       return isTv
-        ? `https://superembed.stream/?video_id=${tmdbId}&tmdb=1&s=${season}&e=${episode}`
-        : `https://superembed.stream/?video_id=${tmdbId}&tmdb=1`;
-    }
-    if (srv === '2embed') {
-      return isTv
-        ? `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`
-        : `https://www.2embed.cc/embed/${tmdbId}`;
+        ? `https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`
+        : `https://vidsrc.to/embed/movie/${tmdbId}`;
     }
     if (srv === 'vidsrcpm') {
       return isTv
         ? `https://vidsrc.pm/embed/tv/${tmdbId}/${season}/${episode}`
         : `https://vidsrc.pm/embed/movie/${tmdbId}`;
     }
+    if (srv === '2embed') {
+      return isTv
+        ? `https://www.2embed.cc/embedtv/${tmdbId}&s=${season}&e=${episode}`
+        : `https://www.2embed.cc/embed/${tmdbId}`;
+    }
     if (srv === 'vidlink') {
       return isTv
         ? `https://vidlink.pro/tv/${tmdbId}/${season}/${episode}?primaryColor=e50914&autoplay=true`
         : `https://vidlink.pro/movie/${tmdbId}?primaryColor=e50914&autoplay=true`;
     }
-    if (srv === 'vidsrcto') {
-      return isTv
-        ? `https://vidsrc.to/embed/tv/${tmdbId}/${season}/${episode}`
-        : `https://vidsrc.to/embed/movie/${tmdbId}`;
-    }
-    return `https://superembed.stream/?video_id=${tmdbId}&tmdb=1`;
+    return `https://vidsrc.to/embed/movie/${tmdbId}`;
   };
 
   const currentEmbedUrl = getEmbedUrl(selectedServer);
@@ -146,6 +142,16 @@ export default function PlayerModal({
     const playUri = stream.magnetUri || stream.url || currentEmbedUrl;
     if (playUri) {
       await Clipboard.setStringAsync(playUri);
+    }
+
+    if (playUri.startsWith('http')) {
+      const vlcIntent = Platform.OS === 'android'
+        ? `intent:${encodeURI(playUri)}#Intent;package=org.videolan.vlc;type=video/*;action=android.intent.action.VIEW;end`
+        : `vlc://${playUri}`;
+      try {
+        await Linking.openURL(vlcIntent);
+        return;
+      } catch {}
     }
 
     Alert.alert(
@@ -162,8 +168,18 @@ export default function PlayerModal({
               try {
                 await Linking.openURL('vlc://');
               } catch {
-                Alert.alert('VLC Player', 'Could not launch VLC. Please ensure VLC is installed from Play Store.');
+                Alert.alert('VLC Needed', 'Please install VLC Player from Play Store.');
               }
+            }
+          }
+        },
+        {
+          text: '📥 Stream via 1DM / Flud',
+          onPress: async () => {
+            try {
+              await Linking.openURL(playUri);
+            } catch {
+              Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager');
             }
           }
         },
@@ -179,92 +195,32 @@ export default function PlayerModal({
     );
   };
 
-  // WebTorrent Client Player HTML
-  const clientPlayerHtml = `
+  // Torrent fallback screen
+  const torrentFallbackHtml = `
     <!DOCTYPE html>
     <html>
       <head>
         <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-        <script src="https://cdn.jsdelivr.net/npm/webtorrent@latest/webtorrent.min.js"></script>
         <style>
-          * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-          body, html { margin:0; padding:0; width:100%; height:100%; background:#000; color:#fff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; overflow:hidden; user-select:none; }
-          #container { width:100%; height:100%; display:flex; justify-content:center; align-items:center; position:relative; background:#000; }
-          video { width:100%; height:100%; object-fit:contain; background:#000; }
-          #statusWrap { position:absolute; z-index:50; display:flex; flex-direction:column; align-items:center; justify-content:center; padding:24px; text-align:center; pointer-events:none; }
-          .spinner { width:44px; height:44px; border:4px solid rgba(255,255,255,0.15); border-top-color:#E50914; border-radius:50%; animation:spin 0.8s linear infinite; margin-bottom:12px; }
-          @keyframes spin { to { transform:rotate(360deg); } }
-          #mainMsg { font-size:14px; font-weight:700; color:#fff; margin-bottom:4px; }
-          #subMsg { font-size:12px; color:#888; }
-          #hud { position:absolute; top:12px; left:12px; right:12px; background:rgba(18,18,18,0.85); padding:8px 14px; border-radius:8px; font-size:11px; display:none; justify-content:space-between; align-items:center; z-index:40; border:1px solid rgba(255,255,255,0.1); }
-          .hud-speed { color:#46d369; font-weight:700; }
-          .hud-peers { color:#00a8ff; font-weight:700; }
-          #noPeersCard { display:none; position:absolute; inset:20px; z-index:60; background:rgba(20,20,20,0.95); border:1px solid #333; border-radius:12px; flex-direction:column; align-items:center; justify-content:center; padding:20px; text-align:center; }
+          * { box-sizing: border-box; }
+          body, html { margin:0; padding:0; width:100%; height:100%; background:#111; color:#fff; font-family:-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display:flex; justify-content:center; align-items:center; }
+          .card { background:#1e1e1e; border:1px solid #333; border-radius:14px; padding:24px; text-align:center; max-width:320px; box-shadow:0 10px 30px rgba(0,0,0,0.8); }
+          .icon { font-size:36px; margin-bottom:12px; }
+          h2 { font-size:18px; margin:0 0 8px 0; color:#fff; }
+          p { font-size:13px; color:#aaa; line-height:1.4; margin:0 0 20px 0; }
+          .btn { display:block; width:100%; padding:12px; border-radius:8px; font-weight:700; font-size:14px; border:none; cursor:pointer; margin-bottom:10px; }
+          .btn-primary { background:#E50914; color:#fff; }
+          .btn-secondary { background:#ff9800; color:#000; }
         </style>
       </head>
       <body>
-        <div id="container">
-          <div id="statusWrap">
-            <div class="spinner"></div>
-            <div id="mainMsg">Connecting to Stream...</div>
-            <div id="subMsg">Searching BitTorrent swarms</div>
-          </div>
-          <div id="hud">
-            <div class="hud-speed" id="hudSpeed">⚡ 0 MB/s</div>
-            <div class="hud-peers" id="hudPeers">👥 0 Peers</div>
-          </div>
-          <video id="videoPlayer" playsinline webkit-playsinline controls></video>
-          <div id="noPeersCard">
-            <h3 style="color:#fff;margin-bottom:8px;">⚡ Swarm Buffering</h3>
-            <p style="color:#aaa;font-size:13px;margin-bottom:16px;">Direct Cloud HD stream available with instant playback & Hindi audio.</p>
-            <button onclick="window.ReactNativeWebView && window.ReactNativeWebView.postMessage('SWITCH_CLOUD')" style="background:#E50914;color:#fff;border:none;padding:10px 20px;border-radius:6px;font-weight:700;cursor:pointer;">⚡ Play Cloud HD</button>
-          </div>
+        <div class="card">
+          <div class="icon">🎬</div>
+          <h2>Torrent Stream Selected</h2>
+          <p>For high-speed P2P playback with zero buffering, launch in VLC Player, or switch to Instant Cloud HD.</p>
+          <button class="btn btn-primary" onclick="window.ReactNativeWebView && window.ReactNativeWebView.postMessage('SWITCH_CLOUD')">⚡ Play Instant Cloud HD</button>
+          <button class="btn btn-secondary" onclick="window.ReactNativeWebView && window.ReactNativeWebView.postMessage('OPEN_EXTERNAL')">🎬 Play in VLC / 1DM</button>
         </div>
-        <script>
-          var videoElem = document.getElementById('videoPlayer');
-          var statusWrap = document.getElementById('statusWrap');
-          var hud = document.getElementById('hud');
-          var noPeersCard = document.getElementById('noPeersCard');
-          var magnetUri = "${stream.magnetUri || ''}";
-          var directUrl = "${stream.url || ''}";
-
-          window.addEventListener('beforeunload', function() {
-            if (window.wtClient) { try { window.wtClient.destroy(); } catch(e) {} }
-          });
-
-          if (directUrl && directUrl.startsWith('http')) {
-            statusWrap.style.display = 'none';
-            videoElem.src = directUrl;
-            videoElem.play().catch(function(){});
-          } else if (magnetUri && window.WebTorrent) {
-            hud.style.display = 'flex';
-            setTimeout(function() {
-              if (videoElem.paused && videoElem.currentTime === 0) {
-                statusWrap.style.display = 'none';
-                noPeersCard.style.display = 'flex';
-              }
-            }, 10000);
-            var client = new WebTorrent({ maxConns: 25, destroyStoreOnDestroy: true });
-            window.wtClient = client;
-            client.add(magnetUri, { destroyStoreOnDestroy: true }, function(torrent) {
-              torrent.deselect();
-              var file = torrent.files.find(function(f) { return /\.(mp4|mkv|webm)$/i.test(f.name); }) || torrent.files[0];
-              if (file) {
-                statusWrap.style.display = 'none';
-                file.renderTo(videoElem, { autoplay: true });
-              }
-              torrent.on('download', function() {
-                noPeersCard.style.display = 'none';
-                statusWrap.style.display = 'none';
-                var speed = (torrent.downloadSpeed / (1024 * 1024)).toFixed(1);
-                document.getElementById('hudSpeed').innerText = '⚡ ' + speed + ' MB/s';
-                document.getElementById('hudPeers').innerText = '👥 ' + torrent.numPeers + ' Peers';
-              });
-            });
-          } else {
-            statusWrap.style.display = 'none';
-          }
-        </script>
       </body>
     </html>
   `;
@@ -274,7 +230,7 @@ export default function PlayerModal({
       <SafeAreaView style={styles.container}>
         <StatusBar hidden={isLandscape} barStyle="light-content" backgroundColor="#000" />
 
-        {/* Portrait Mode Header */}
+        {/* Portrait Header */}
         {!isLandscape && (
           <View style={styles.header}>
             <TouchableOpacity style={styles.backButton} onPress={handleClose}>
@@ -297,20 +253,18 @@ export default function PlayerModal({
               </View>
             </View>
 
-            {/* VLC Button */}
             <TouchableOpacity style={styles.vlcButton} onPress={handleOpenExternal}>
               <Ionicons name="open-outline" size={13} color="#000" />
               <Text style={styles.vlcButtonText}>VLC</Text>
             </TouchableOpacity>
 
-            {/* Rotate Button */}
             <TouchableOpacity style={styles.rotateButton} onPress={toggleOrientation}>
               <Ionicons name="expand-outline" size={17} color="#fff" />
             </TouchableOpacity>
           </View>
         )}
 
-        {/* Server Selection Row (Portrait only) */}
+        {/* Server Selection Row */}
         {!isLandscape && isCloudActive && (
           <View style={styles.serverRowWrap}>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.serverRowContent}>
@@ -337,7 +291,7 @@ export default function PlayerModal({
           </View>
         )}
 
-        {/* Player Container */}
+        {/* Video Player Container */}
         <View style={[styles.playerContainer, isLandscape && styles.playerContainerLandscape]}>
           {isCloudActive ? (
             <WebView
@@ -357,7 +311,6 @@ export default function PlayerModal({
               userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               onShouldStartLoadWithRequest={(req) => {
                 const u = req.url || '';
-                // Prevent crash by rejecting non-http/https intents
                 if (!u.startsWith('http://') && !u.startsWith('https://') && !u.startsWith('about:')) {
                   return false;
                 }
@@ -365,9 +318,7 @@ export default function PlayerModal({
               }}
               onRenderProcessGone={() => true}
               onLoadProgress={({ nativeEvent }) => {
-                if (nativeEvent.progress > 0.3) {
-                  setLoading(false);
-                }
+                if (nativeEvent.progress > 0.3) setLoading(false);
               }}
               onLoadEnd={() => setLoading(false)}
               onError={() => setLoading(false)}
@@ -375,30 +326,28 @@ export default function PlayerModal({
           ) : (
             <WebView
               originWhitelist={['*']}
-              source={{ html: clientPlayerHtml }}
+              source={{ html: torrentFallbackHtml }}
               style={styles.webview}
               javaScriptEnabled={true}
               domStorageEnabled={true}
-              allowsFullscreenVideo={true}
-              allowsInlineMediaPlayback={true}
-              mediaPlaybackRequiresUserAction={false}
-              userAgent="Mozilla/5.0 (Linux; Android 13; Mobile) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
               onMessage={(event) => {
                 const msg = event.nativeEvent.data;
                 if (msg === 'SWITCH_CLOUD') {
                   setIsCloud(true);
                   setLoading(true);
+                } else if (msg === 'OPEN_EXTERNAL') {
+                  handleOpenExternal();
                 }
               }}
               onLoadEnd={() => setLoading(false)}
             />
           )}
 
-          {/* Floating Non-Blocking Loading Pill */}
+          {/* Non-blocking Floating Loader */}
           {loading && (
             <View style={styles.floatingLoader}>
               <ActivityIndicator size="small" color="#E50914" />
-              <Text style={styles.floatingLoaderText}>Connecting to HD Server...</Text>
+              <Text style={styles.floatingLoaderText}>Loading HD Stream...</Text>
             </View>
           )}
 
@@ -437,7 +386,7 @@ export default function PlayerModal({
           )}
         </View>
 
-        {/* Footer Info (Portrait only) */}
+        {/* Footer Info */}
         {!isLandscape && (
           <View style={styles.footer}>
             {isCloudActive ? (
