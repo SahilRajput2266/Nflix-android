@@ -14,6 +14,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchMediaDetails, fetchTvSeasonEpisodes } from '../services/tmdb';
+import { fetchTorrentStreams } from '../services/torrentService';
 
 const { width } = Dimensions.get('window');
 
@@ -22,30 +23,63 @@ export default function DetailModal({
   media,
   isSaved,
   onClose,
-  onPlay,
+  onPlayStream,
   onToggleWatchlist
 }) {
   const [details, setDetails] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingStreams, setLoadingStreams] = useState(true);
+  const [streams, setStreams] = useState([]);
   const [selectedSeason, setSelectedSeason] = useState(1);
+  const [selectedEpisode, setSelectedEpisode] = useState(1);
   const [episodes, setEpisodes] = useState([]);
 
   useEffect(() => {
     if (!media || !visible) return;
     setLoading(true);
-    fetchMediaDetails(media.id, media.mediaType).then((data) => {
+    setLoadingStreams(true);
+    setStreams([]);
+
+    fetchMediaDetails(media.id, media.mediaType).then(async (data) => {
       setDetails(data);
       setLoading(false);
+
       if (data && data.mediaType === 'tv') {
-        fetchTvSeasonEpisodes(media.id, 1).then(setEpisodes);
+        const eps = await fetchTvSeasonEpisodes(media.id, 1);
+        setEpisodes(eps);
       }
+
+      const imdb = data?.imdbId || (media.imdbId);
+      if (imdb) {
+        const torrents = await fetchTorrentStreams(imdb, data?.mediaType || 'movie', 1, 1);
+        setStreams(torrents);
+      }
+      setLoadingStreams(false);
     });
   }, [media, visible]);
 
-  const handleSeasonChange = (sNum) => {
+  const handleEpisodeSelect = async (ep) => {
+    setSelectedEpisode(ep.episodeNumber);
+    setLoadingStreams(true);
+    if (details?.imdbId) {
+      const torrents = await fetchTorrentStreams(details.imdbId, 'tv', selectedSeason, ep.episodeNumber);
+      setStreams(torrents);
+    }
+    setLoadingStreams(false);
+  };
+
+  const handleSeasonChange = async (sNum) => {
     setSelectedSeason(sNum);
+    setSelectedEpisode(1);
     if (media) {
-      fetchTvSeasonEpisodes(media.id, sNum).then(setEpisodes);
+      const eps = await fetchTvSeasonEpisodes(media.id, sNum);
+      setEpisodes(eps);
+      if (details?.imdbId) {
+        setLoadingStreams(true);
+        const torrents = await fetchTorrentStreams(details.imdbId, 'tv', sNum, 1);
+        setStreams(torrents);
+        setLoadingStreams(false);
+      }
     }
   };
 
@@ -85,29 +119,21 @@ export default function DetailModal({
                 <Text style={styles.rating}>★ {details?.rating || media.rating}</Text>
                 <Text style={styles.metaText}>{details?.releaseYear || media.releaseYear}</Text>
                 <View style={styles.badge}>
-                  <Text style={styles.badgeText}>HD</Text>
+                  <Text style={styles.badgeText}>P2P TORRENT</Text>
                 </View>
                 {details?.runtime ? (
                   <Text style={styles.metaText}>{details.runtime} min</Text>
                 ) : null}
               </View>
 
-              {/* Primary Action Buttons */}
-              <TouchableOpacity
-                style={styles.playBtn}
-                onPress={() => onPlay(details || media, selectedSeason, 1)}
-              >
-                <Ionicons name="play" size={22} color="#000" />
-                <Text style={styles.playBtnText}>Play Now</Text>
-              </TouchableOpacity>
-
+              {/* Action Buttons */}
               <TouchableOpacity
                 style={styles.watchlistBtn}
                 onPress={() => onToggleWatchlist(details || media)}
               >
                 <Ionicons
                   name={isSaved ? 'checkmark' : 'add'}
-                  size={22}
+                  size={20}
                   color="#fff"
                 />
                 <Text style={styles.watchlistBtnText}>
@@ -143,7 +169,7 @@ export default function DetailModal({
                 </Text>
               )}
 
-              {/* TV Show Seasons & Episodes */}
+              {/* TV Show Seasons & Episodes (if series) */}
               {details?.mediaType === 'tv' && details.seasons?.length > 0 && (
                 <View style={styles.episodesSection}>
                   <Text style={styles.sectionHeading}>Episodes</Text>
@@ -175,31 +201,78 @@ export default function DetailModal({
                     ))}
                   </ScrollView>
 
-                  {/* Episodes List */}
-                  {episodes.map((ep) => (
-                    <TouchableOpacity
-                      key={ep.id}
-                      style={styles.epCard}
-                      onPress={() => onPlay(details || media, ep.seasonNumber, ep.episodeNumber)}
-                    >
-                      <Image
-                        source={{ uri: ep.still || media.poster }}
-                        style={styles.epThumb}
-                        resizeMode="cover"
-                      />
-                      <View style={styles.epInfo}>
-                        <Text style={styles.epNum}>
-                          {ep.episodeNumber}. {ep.name}
+                  {/* Episodes Horizontal Picker */}
+                  <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginBottom: 16 }}>
+                    {episodes.map((ep) => (
+                      <TouchableOpacity
+                        key={ep.id}
+                        style={[
+                          styles.epPill,
+                          selectedEpisode === ep.episodeNumber && styles.epPillActive
+                        ]}
+                        onPress={() => handleEpisodeSelect(ep)}
+                      >
+                        <Text
+                          style={[
+                            styles.epPillText,
+                            selectedEpisode === ep.episodeNumber && styles.epPillTextActive
+                          ]}
+                        >
+                          Ep {ep.episodeNumber}
                         </Text>
-                        <Text style={styles.epDesc} numberOfLines={2}>
-                          {ep.overview || 'No description available.'}
-                        </Text>
-                      </View>
-                      <Ionicons name="play-circle-outline" size={32} color="#E50914" />
-                    </TouchableOpacity>
-                  ))}
+                      </TouchableOpacity>
+                    ))}
+                  </ScrollView>
                 </View>
               )}
+
+              {/* Torrent Streams Section */}
+              <View style={styles.torrentSection}>
+                <View style={styles.streamHeaderRow}>
+                  <Text style={styles.sectionHeading}>Available Torrent Streams</Text>
+                  <Text style={styles.streamCountBadge}>{streams.length} Found</Text>
+                </View>
+
+                {loadingStreams ? (
+                  <View style={styles.streamLoadingWrap}>
+                    <ActivityIndicator size="small" color="#E50914" />
+                    <Text style={styles.streamLoadingText}>Searching active torrent swarms & seeds...</Text>
+                  </View>
+                ) : streams.length === 0 ? (
+                  <Text style={styles.noStreamsText}>No torrent streams found for this title.</Text>
+                ) : (
+                  streams.map((stream, idx) => (
+                    <TouchableOpacity
+                      key={stream.id || idx}
+                      style={styles.streamCard}
+                      onPress={() => onPlayStream(details || media, stream, selectedSeason, selectedEpisode)}
+                    >
+                      <View style={styles.streamTopLine}>
+                        <View style={[styles.qualityBadge, stream.quality.includes('4K') && styles.quality4k]}>
+                          <Text style={styles.qualityText}>{stream.quality}</Text>
+                        </View>
+                        <Text style={styles.audioBadgeText}>{stream.audioBadge}</Text>
+                      </View>
+
+                      <Text style={styles.streamTitleText} numberOfLines={2}>
+                        {stream.title}
+                      </Text>
+
+                      <View style={styles.streamMetaRow}>
+                        {stream.size ? (
+                          <Text style={styles.streamMetaItem}>💾 {stream.size}</Text>
+                        ) : null}
+                        <Text style={styles.streamMetaItem}>👤 {stream.seeders} Seeders</Text>
+                        {stream.url ? (
+                          <Text style={[styles.streamMetaItem, { color: '#46d369', fontWeight: '700' }]}>⚡ Direct High-Speed</Text>
+                        ) : (
+                          <Text style={[styles.streamMetaItem, { color: '#00a8ff' }]}>P2P Swarm</Text>
+                        )}
+                      </View>
+                    </TouchableOpacity>
+                  ))
+                )}
+              </View>
             </View>
           )}
         </ScrollView>
@@ -218,7 +291,7 @@ const styles = StyleSheet.create({
   },
   backdropWrap: {
     width,
-    height: 250,
+    height: 240,
     position: 'relative'
   },
   backdrop: {
@@ -278,50 +351,35 @@ const styles = StyleSheet.create({
   },
   badge: {
     borderWidth: 1,
-    borderColor: '#777',
+    borderColor: '#E50914',
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 3
   },
   badgeText: {
-    color: '#ccc',
-    fontSize: 11,
-    fontWeight: '600'
-  },
-  playBtn: {
-    backgroundColor: '#fff',
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderRadius: 6,
-    marginBottom: 10
-  },
-  playBtnText: {
-    color: '#000',
-    fontWeight: '700',
-    fontSize: 16,
-    marginLeft: 8
+    color: '#E50914',
+    fontSize: 10,
+    fontWeight: '800'
   },
   watchlistBtn: {
     backgroundColor: '#262626',
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 6,
     marginBottom: 16
   },
   watchlistBtnText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 15,
+    fontSize: 14,
     marginLeft: 8
   },
   overview: {
     color: '#ddd',
-    fontSize: 14,
-    lineHeight: 22,
+    fontSize: 13,
+    lineHeight: 20,
     marginBottom: 16
   },
   genreWrap: {
@@ -333,7 +391,7 @@ const styles = StyleSheet.create({
   genrePill: {
     backgroundColor: '#222',
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 4,
     borderRadius: 14
   },
   genreText: {
@@ -350,27 +408,27 @@ const styles = StyleSheet.create({
     fontWeight: '600'
   },
   episodesSection: {
-    marginTop: 24,
+    marginTop: 16,
     borderTopWidth: 1,
     borderTopColor: '#262626',
     paddingTop: 16
   },
   sectionHeading: {
     color: '#fff',
-    fontSize: 18,
-    fontWeight: '700',
-    marginBottom: 12
+    fontSize: 17,
+    fontWeight: '700'
   },
   seasonList: {
     flexDirection: 'row',
-    marginBottom: 16
+    marginTop: 10,
+    marginBottom: 12
   },
   seasonTab: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 16,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 14,
     backgroundColor: '#222',
-    marginRight: 10
+    marginRight: 8
   },
   seasonTabActive: {
     backgroundColor: '#E50914'
@@ -378,40 +436,117 @@ const styles = StyleSheet.create({
   seasonTabText: {
     color: '#aaa',
     fontWeight: '600',
-    fontSize: 13
+    fontSize: 12
   },
   seasonTabTextActive: {
     color: '#fff',
     fontWeight: '700'
   },
-  epCard: {
+  epPill: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: '#1f1f1f',
+    borderRadius: 6,
+    marginRight: 8,
+    borderWidth: 1,
+    borderColor: '#333'
+  },
+  epPillActive: {
+    borderColor: '#E50914',
+    backgroundColor: '#2a1515'
+  },
+  epPillText: {
+    color: '#ccc',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  epPillTextActive: {
+    color: '#E50914',
+    fontWeight: '700'
+  },
+  torrentSection: {
+    marginTop: 20,
+    borderTopWidth: 1,
+    borderTopColor: '#262626',
+    paddingTop: 16
+  },
+  streamHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12
+  },
+  streamCountBadge: {
+    color: '#aaa',
+    fontSize: 12,
+    backgroundColor: '#222',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10
+  },
+  streamLoadingWrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1b1b1b',
-    borderRadius: 8,
-    padding: 10,
-    marginBottom: 10
+    gap: 10,
+    paddingVertical: 20
   },
-  epThumb: {
-    width: 90,
-    height: 55,
-    borderRadius: 4,
-    backgroundColor: '#333'
+  streamLoadingText: {
+    color: '#888',
+    fontSize: 13
   },
-  epInfo: {
-    flex: 1,
-    marginLeft: 12,
-    marginRight: 8
-  },
-  epNum: {
-    color: '#fff',
-    fontWeight: '700',
+  noStreamsText: {
+    color: '#777',
     fontSize: 13,
-    marginBottom: 4
+    paddingVertical: 12
   },
-  epDesc: {
+  streamCard: {
+    backgroundColor: '#1c1c1c',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 10,
+    borderLeftWidth: 3,
+    borderLeftColor: '#E50914'
+  },
+  streamTopLine: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 6
+  },
+  qualityBadge: {
+    backgroundColor: '#333',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 3
+  },
+  quality4k: {
+    backgroundColor: '#9c27b0'
+  },
+  qualityText: {
+    color: '#fff',
+    fontSize: 11,
+    fontWeight: '700'
+  },
+  audioBadgeText: {
+    color: '#46d369',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  streamTitleText: {
+    color: '#eee',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginBottom: 8
+  },
+  streamMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12
+  },
+  streamMetaItem: {
     color: '#888',
     fontSize: 11,
-    lineHeight: 15
+    fontWeight: '600'
   }
 });

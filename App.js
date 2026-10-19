@@ -56,6 +56,7 @@ export default function App() {
   const [detailVisible, setDetailVisible] = useState(false);
   const [playerVisible, setPlayerVisible] = useState(false);
   const [playerItem, setPlayerItem] = useState(null);
+  const [currentStream, setCurrentStream] = useState(null);
   const [currentSeason, setCurrentSeason] = useState(1);
   const [currentEpisode, setCurrentEpisode] = useState(1);
 
