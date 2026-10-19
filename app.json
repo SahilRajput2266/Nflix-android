@@ -4,7 +4,7 @@
     "slug": "nflix-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/outer_logo.png",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
       "supportsTablet": true
@@ -15,8 +15,8 @@
         "INTERNET"
       ],
       "adaptiveIcon": {
-        "foregroundImage": "./assets/outer_logo.png",
-        "backgroundColor": "#0c0d14"
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundColor": "#000000"
       }
     },
     "web": {

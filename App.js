@@ -130,7 +130,7 @@ export default function App() {
       <View style={styles.header}>
         <View style={styles.brandWrap}>
           <Image
-            source={require('./assets/inner_logo.png')}
+            source={require('./assets/streamix_header.png')}
             style={styles.brandLogo}
             resizeMode="contain"
           />
@@ -413,8 +413,8 @@ const styles = StyleSheet.create({
     marginRight: 6
   },
   brandLogo: {
-    width: 38,
-    height: 38
+    width: 120,
+    height: 28
   },
   headerTabs: {
     flexDirection: 'row',
