@@ -62,6 +62,49 @@ export default function DetailModal({
     });
   }, [media, visible]);
 
+  const handleDownload = async (stream) => {
+    try {
+      const downloadUri = stream?.magnetUri || stream?.url;
+      if (!downloadUri) {
+        Alert.alert('Download Error', 'No download link available for this stream.');
+        return;
+      }
+
+      if (downloadUri.startsWith('http')) {
+        await Linking.openURL(downloadUri);
+        return;
+      }
+
+      try {
+        const canOpen = await Linking.canOpenURL(downloadUri);
+        if (canOpen) {
+          await Linking.openURL(downloadUri);
+        } else {
+          showDownloadPrompt(downloadUri);
+        }
+      } catch {
+        showDownloadPrompt(downloadUri);
+      }
+    } catch (err) {
+      Alert.alert('Download Error', err.message || 'Unable to open download link.');
+    }
+  };
+
+  const showDownloadPrompt = (magnet) => {
+    Alert.alert(
+      'Torrent Downloader Needed',
+      'To download torrents directly to your phone storage, please install a downloader (like 1DM or Flud) from Play Store.',
+      [
+        {
+          text: 'Get 1DM (Play Store)',
+          onPress: () =>
+            Linking.openURL('https://play.google.com/store/apps/details?id=idm.internet.download.manager')
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ]
+    );
+  };
+
   const handleEpisodeSelect = async (ep) => {
     setSelectedEpisode(ep.episodeNumber);
     setLoadingStreams(true);

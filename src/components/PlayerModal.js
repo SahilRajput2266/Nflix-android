@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Modal,
   View,
@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { Ionicons } from '@expo/vector-icons';
+import * as ScreenOrientation from 'expo-screen-orientation';
 
 export default function PlayerModal({
   visible,
@@ -24,8 +25,41 @@ export default function PlayerModal({
 }) {
   const [loading, setLoading] = useState(true);
   const [selectedServer, setSelectedServer] = useState('multiembed');
+  const [isLandscape, setIsLandscape] = useState(false);
+
+  useEffect(() => {
+    if (visible) {
+      // Unlock all orientations while playing video
+      ScreenOrientation.unlockAsync().catch(() => {});
+    }
+    return () => {
+      // Re-lock to portrait when leaving player
+      ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP).catch(() => {});
+    };
+  }, [visible]);
 
   if (!visible || !item || !stream) return null;
+
+  const toggleOrientation = async () => {
+    try {
+      if (isLandscape) {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+        setIsLandscape(false);
+      } else {
+        await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.LANDSCAPE_RIGHT);
+        setIsLandscape(true);
+      }
+    } catch (e) {
+      console.warn('Orientation toggle error:', e);
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await ScreenOrientation.lockAsync(ScreenOrientation.OrientationLock.PORTRAIT_UP);
+    } catch (e) {}
+    onClose && onClose();
+  };
 
   const imdbId = stream.imdbId || item.imdbId;
   const isTv = item.mediaType === 'tv';
@@ -36,7 +70,6 @@ export default function PlayerModal({
         ? `https://vidsrc.cc/v2/embed/tv/${imdbId}/${season}/${episode}`
         : `https://vidsrc.cc/v2/embed/movie/${imdbId}`;
     }
-    // Default: multiembed (super fast, clean)
     return isTv
       ? `https://multiembed.mov/?video_id=${imdbId}&s=${season}&e=${episode}`
       : `https://multiembed.mov/?video_id=${imdbId}`;
@@ -44,7 +77,6 @@ export default function PlayerModal({
 
   const currentEmbedUrl = stream.embedUrl || getEmbedUrl(selectedServer);
 
-  // 100% Client-Side WebTorrent HTML player (Uses Phone RAM, No Server)
   const clientPlayerHtml = `
     <!DOCTYPE html>
     <html>
@@ -151,13 +183,13 @@ export default function PlayerModal({
   `;
 
   return (
-    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={onClose}>
+    <Modal visible={visible} animationType="slide" transparent={false} onRequestClose={handleClose}>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" backgroundColor="#000" />
 
         {/* Top Header */}
         <View style={styles.header}>
-          <TouchableOpacity onPress={onClose} style={styles.backButton}>
+          <TouchableOpacity onPress={handleClose} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#fff" />
           </TouchableOpacity>
 
@@ -169,9 +201,15 @@ export default function PlayerModal({
               {stream.isCloudStream ? '⚡ Instant Cloud CDN' : (stream.quality || 'HD') + ' • ' + (stream.audioBadge || 'P2P')}
             </Text>
           </View>
+
+          {/* Fullscreen / Rotate Screen Button */}
+          <TouchableOpacity onPress={toggleOrientation} style={styles.rotateButton}>
+            <Ionicons name={isLandscape ? 'phone-portrait-outline' : 'scan-outline'} size={20} color="#fff" />
+            <Text style={styles.rotateText}>{isLandscape ? 'Portrait' : 'Rotate'}</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Cloud Stream Server Switcher (Only shown in Cloud Mode) */}
+        {/* Cloud Stream Server Switcher */}
         {stream.isCloudStream && (
           <View style={styles.serverRow}>
             <TouchableOpacity
@@ -240,28 +278,30 @@ export default function PlayerModal({
           )}
         </View>
 
-        {/* Footer Info */}
-        <View style={styles.footer}>
-          {stream.isCloudStream ? (
-            <View style={styles.footerMeta}>
-              <Text style={[styles.footerMetaText, { color: '#46d369', fontWeight: '700' }]}>
-                ⚡ Direct Cloud Stream (Zero Buffering)
-              </Text>
-              <Text style={styles.footerMetaText}>• 1080p FHD • Subtitles Included</Text>
-            </View>
-          ) : (
-            <>
-              <Text style={styles.footerText} numberOfLines={1}>
-                📡 {stream.title}
-              </Text>
+        {/* Footer Info (Hidden in landscape to maximize video) */}
+        {!isLandscape && (
+          <View style={styles.footer}>
+            {stream.isCloudStream ? (
               <View style={styles.footerMeta}>
-                <Text style={styles.footerMetaText}>Seeders: {stream.seeders}</Text>
-                {stream.size ? <Text style={styles.footerMetaText}>• Size: {stream.size}</Text> : null}
-                <Text style={[styles.footerMetaText, { color: '#46d369' }]}>• Client-Side P2P</Text>
+                <Text style={[styles.footerMetaText, { color: '#46d369', fontWeight: '700' }]}>
+                  ⚡ Direct Cloud Stream (Zero Buffering)
+                </Text>
+                <Text style={styles.footerMetaText}>• 1080p FHD • Subtitles Included</Text>
               </View>
-            </>
-          )}
-        </View>
+            ) : (
+              <>
+                <Text style={styles.footerText} numberOfLines={1}>
+                  📡 {stream.title}
+                </Text>
+                <View style={styles.footerMeta}>
+                  <Text style={styles.footerMetaText}>Seeders: {stream.seeders}</Text>
+                  {stream.size ? <Text style={styles.footerMetaText}>• Size: {stream.size}</Text> : null}
+                  <Text style={[styles.footerMetaText, { color: '#46d369' }]}>• Client-Side P2P</Text>
+                </View>
+              </>
+            )}
+          </View>
+        )}
       </SafeAreaView>
     </Modal>
   );
@@ -296,6 +336,21 @@ const styles = StyleSheet.create({
   },
   subBadge: {
     color: '#46d369',
+    fontSize: 12,
+    fontWeight: '600'
+  },
+  rotateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: '#262626',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    marginLeft: 8
+  },
+  rotateText: {
+    color: '#fff',
     fontSize: 12,
     fontWeight: '600'
   },
